@@ -143,6 +143,18 @@ let me=null, ws=null, channels=[], current=null, currentDM=null;
 const profiles=new Map(); const seen=new Set(); const rootThreads=new Map(); // rootMsgId -> {threadId, count}
 let chanSub=null, typSub=null, userSub=null, dmSub=null;
 let panelMode=null, panelThread=null;
+let chanCursor=0;
+// periodic reconcile: catch any live broadcast missed under at-most-once delivery
+setInterval(reconcileChannel, 6000);
+// periodic rail refresh so new DMs + unread badges appear without a live signal
+setInterval(()=>{ if(ws) renderChannels(); }, 10000);
+async function reconcileChannel(){ if(!current) return;
+  const {data}=await sb.from('messages').select('*').eq('channel_id',current.id).gt('seq',chanCursor).order('seq').limit(100);
+  if(!data||!data.length) return;
+  for(const m of data){ chanCursor=Math.max(chanCursor,m.seq);
+    if(m.thread_id&&!rootThreads.has(m.id)){ bumpThread(m.thread_id); if(panelMode==='thread'&&panelThread&&panelThread.id===m.thread_id) appendThreadMsg(m); continue; }
+    renderMsg(m); }
+  loadReactions(data.map(m=>m.id)); scrollDown(); }
 
 // ---------------- auth ----------------
 $('guestBtn').onclick=async()=>{ const name=$('name').value.trim()||'Guest '+Math.floor(Math.random()*9000+1000); busy(true);
@@ -217,6 +229,7 @@ async function openChannel(c){
   const ordered=(msgs||[]).slice().reverse(); $('messages').innerHTML='';
   for(const m of ordered) if(!m.thread_id||rootThreads.has(m.id)) renderMsg(m); // hide pure thread replies from main view
   await loadReactions(ordered.map(m=>m.id));
+  chanCursor=ordered.length?ordered[ordered.length-1].seq:0;
   scrollDown();
   if(ordered.length) sb.rpc('mark_read',{p_scope_type:'channel',p_scope_id:c.id,p_up_to_seq:ordered[ordered.length-1].seq});
   subscribeChannel(c);
@@ -237,6 +250,7 @@ function subscribeChannel(c){
 }
 function onIncoming(m){
   if(m.channel_id!==current?.id) return;
+  if(m.seq) chanCursor=Math.max(chanCursor,m.seq);
   if(m.thread_id && !rootThreads.has(m.id)){ // a thread reply
     bumpThread(m.thread_id);
     if(panelMode==='thread'&&panelThread&&panelThread.id===m.thread_id) appendThreadMsg(m);
@@ -290,11 +304,14 @@ function applyReaction({message_id,emoji,user_id,added}){
 function renderRxns(mid,list){ const em=new Map(); list.forEach(v=>em.set(v.emoji,new Set(v.users))); rxnState.set(mid,em); renderRxnsFromState(mid); }
 function renderRxnsFromState(mid){ const el=$('rx-'+mid); if(!el) return; const em=rxnState.get(mid)||new Map(); let h='';
   for(const [emoji,users] of em){ if(!users.size) continue; h+=`<span class="rxn ${users.has(me)?'mine':''}" data-e="${emoji}">${emoji} ${users.size}</span>`; }
-  el.innerHTML=h; el.querySelectorAll('.rxn').forEach(s=>s.onclick=()=>sb.rpc('toggle_reaction',{p_message:mid,p_emoji:s.dataset.e})); }
+  el.innerHTML=h; el.querySelectorAll('.rxn').forEach(s=>s.onclick=()=>toggleReactionLocal(mid,s.dataset.e)); }
+// optimistic toggle: reflect locally now, then persist (broadcast echo reconciles others)
+function toggleReactionLocal(mid,emoji){ const em=rxnState.get(mid); const has=em&&em.get(emoji)&&em.get(emoji).has(me);
+  applyReaction({message_id:mid,emoji,user_id:me,added:!has}); sb.rpc('toggle_reaction',{p_message:mid,p_emoji:emoji}).catch(()=>{}); }
 
 function openEmoji(e,mid){ const p=$('pop'); p.innerHTML=EMOJIS.map(x=>`<span class="emoji" data-e="${x}">${x}</span>`).join('');
   p.classList.remove('hidden'); p.style.left='12px';
-  p.querySelectorAll('.emoji').forEach(s=>s.onclick=()=>{ sb.rpc('toggle_reaction',{p_message:mid,p_emoji:s.dataset.e}); p.classList.add('hidden'); }); }
+  p.querySelectorAll('.emoji').forEach(s=>s.onclick=()=>{ toggleReactionLocal(mid,s.dataset.e); p.classList.add('hidden'); }); }
 document.addEventListener('click',e=>{ if(!e.target.closest('#pop')&&!e.target.closest('[data-act="react"]')&&!e.target.closest('#composer')) $('pop').classList.add('hidden'); });
 
 async function editMsg(m){ const t=prompt('Edit message',m.body_text); if(t==null) return; await sb.rpc('edit_message',{p_message:m.id,p_body:{text:t},p_body_text:t}); }
