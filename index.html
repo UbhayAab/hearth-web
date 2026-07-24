@@ -232,7 +232,7 @@ async function enter(){
   let joinedId=null; const tok=parseInviteToken()||sessionStorage.getItem('pendingInvite');
   if(tok){ sessionStorage.removeItem('pendingInvite'); const {data}=await sb.rpc('redeem_invite',{p_token:tok}); if(data) joinedId=data.id; history.replaceState(null,'',location.pathname+location.search); }
   // 2. ensure demo-space membership so the shared demo is never empty
-  await sb.rpc('redeem_invite',{p_token:DEMO_TOKEN}).catch(()=>{});
+  try{ await sb.rpc('redeem_invite',{p_token:DEMO_TOKEN}); }catch{}
   $('auth').classList.add('hidden'); $('chat').classList.remove('hidden');
   const {data:myp}=await sb.from('profiles').select('display_name').eq('id',me).maybeSingle(); $('meName').textContent=myp?.display_name||'you';
   subUser(session.access_token); heartbeat(); presenceLoop();
