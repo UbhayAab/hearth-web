@@ -128,6 +128,7 @@
       <button class="icon" id="btnActivity" title="Activity">Activity</button>
       <button class="icon" id="btnSearch" title="Search">Search</button>
       <button class="icon" id="btnPins" title="Pinned">Pins</button>
+      <button class="icon" id="btnMute" title="Mute this channel">🔔</button>
       <button class="icon" id="btnMembers" title="Members"><span class="dot"></span> <span id="onlineCount">1</span></button>
       <span class="muted" id="meName" style="margin:0 8px"></span>
       <button class="ghost" id="signout" style="padding:5px 9px">Sign out</button>
@@ -191,7 +192,7 @@ const timeOf=d=>new Date(d||Date.now()).toLocaleTimeString([],{hour:'2-digit',mi
 let me=null, ws=null, spaces=[], channels=[], current=null, currentDM=null;
 const profiles=new Map(); const seen=new Set(); const renderedIds=new Set(); const rootThreads=new Map(); // rootMsgId -> {threadId, count}
 const msgCache=new Map(); let replyTarget=null;
-let pendingAttachments=[]; const mediaUrlCache=new Map();
+let pendingAttachments=[]; const mediaUrlCache=new Map(); const muted=new Set();
 let chanSub=null, typSub=null, userSub=null, dmSub=null;
 let panelMode=null, panelThread=null;
 let chanCursor=0;
@@ -243,7 +244,7 @@ async function enter(){
 async function loadSpaces(){ const {data}=await sb.from('workspaces').select('*').order('created_at'); spaces=data||[]; renderSpaceRail(); }
 async function switchWorkspace(target){ if(!target) return; ws=target; current=null; currentDM=null; closePanel(); if(voice.active&&voice.channel&&voice.channel.workspace_id!==target.id){/*keep voice*/}
   $('spaceName').textContent=ws.name||''; renderSpaceRail();
-  await loadMembers(); await loadChannels();
+  await loadMembers(); await loadChannels(); await loadMuted();
   const gen=channels.find(c=>c.name==='general'&&c.kind!=='voice')||channels.find(c=>c.kind!=='voice');
   if(gen) openChannel(gen); else { $('messages').innerHTML='<div class="muted" style="padding:20px">No channels yet.</div>'; }
 }
@@ -252,6 +253,17 @@ function renderSpaceRail(){ const r=$('spaceRail'); if(!r) return;
   r.querySelectorAll('[data-ws]').forEach(el=>el.onclick=()=>{ const s=spaces.find(x=>x.id===el.dataset.ws); if(s&&(!ws||s.id!==ws.id)) switchWorkspace(s); });
   r.querySelector('[data-add]').onclick=createSpace;
 }
+// copy a permalink to a message
+async function copyLink(m){ const {data,error}=await sb.rpc('get_permalink',{p_message:m.id}); if(error) return;
+  const url=location.origin+location.pathname+'#/m/'+data.channel_id+'/'+data.seq;
+  try{ await navigator.clipboard.writeText(url); }catch{}
+  const b=$('replyBar'); b.classList.remove('hidden'); b.innerHTML='Link copied: '+esc(url);
+  setTimeout(()=>{ if((b.textContent||'').startsWith('Link copied')){ b.classList.add('hidden'); b.innerHTML=''; } },2600); }
+// per-channel mute toggle
+$('btnMute').onclick=async()=>{ if(!current) return; const isM=muted.has(current.id); const level=isM?'inherit':'nothing';
+  const {error}=await sb.rpc('set_notify_level',{p_scope_type:'channel',p_scope_id:current.id,p_level:level,p_muted_until:null}); if(error){ alert(error.message); return; }
+  if(isM) muted.delete(current.id); else muted.add(current.id); $('btnMute').textContent=muted.has(current.id)?'🔕':'🔔'; };
+async function loadMuted(){ try{ const {data}=await sb.rpc('get_notify_settings',{p_workspace:ws.id}); (data?.channels||[]).forEach(c=>{ if(c.notify_level==='nothing') muted.add(c.scope_id); }); }catch{} }
 async function createSpace(){ const name=prompt('Name your Space (organization):'); if(!name||!name.trim()) return;
   const {data,error}=await sb.rpc('create_space',{p_name:name.trim()}); if(error){ alert(error.message); return; }
   await loadSpaces(); await switchWorkspace(spaces.find(s=>s.id===data.id)||data); copyInviteLink(true);
@@ -299,6 +311,7 @@ async function dmOther(convId){ const {data}=await sb.from('conversation_members
 async function openChannel(c){
   if(!c) return; current=c; currentDM=null; seen.clear(); rootThreads.clear(); closePanel();
   $('hdr').textContent='# '+c.name; $('hdrtopic').textContent=c.topic||''; $('composer').placeholder='Message #'+c.name;
+  $('btnMute').textContent=muted.has(c.id)?'🔕':'🔔';
   renderChannels();
   $('messages').innerHTML='<div class="muted" style="padding:20px">loading...</div>';
   // load threads map for this channel
@@ -351,6 +364,7 @@ function renderMsg(m){
       <button class="icon" data-act="react">😊</button>
       <button class="icon" data-act="reply">Reply</button>
       <button class="icon" data-act="fwd">Fwd</button>
+      <button class="icon" data-act="link">Link</button>
       <button class="icon" data-act="thread">Thread</button>
       <button class="icon" data-act="pin">Pin</button>
       ${m.author_id===me?'<button class="icon" data-act="edit">Edit</button><button class="icon" data-act="del">Del</button>':''}
@@ -366,6 +380,7 @@ function renderMsg(m){
   el.querySelector('[data-act="react"]').onclick=e=>openEmoji(e,m.id);
   el.querySelector('[data-act="reply"]').onclick=()=>setReply(m);
   el.querySelector('[data-act="fwd"]').onclick=()=>forwardMsg(m);
+  el.querySelector('[data-act="link"]').onclick=()=>copyLink(m);
   el.querySelector('[data-act="thread"]').onclick=()=>openThread(m);
   el.querySelector('[data-act="pin"]').onclick=()=>sb.rpc('pin_message',{p_message:m.id});
   el.querySelector('#th-'+m.id).onclick=()=>openThread(m);
