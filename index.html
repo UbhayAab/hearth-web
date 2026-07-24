@@ -379,7 +379,10 @@ async function send(){ const text=composer.value.trim(); if(!text) return; compo
   el.innerHTML=`<span class="who">${esc(profiles.get(me)?.display_name||'you')}</span><span class="t">now</span><div class="body">${fmt(text)}</div><div class="rxns" id="rx-${nonce}"></div>`; $('messages').appendChild(el); scrollDown();
   const {data,error}=await sb.rpc('send_message',{p_channel:current.id,p_client_msg_id:nonce,p_body:{text},p_body_text:text,p_mentions:mentions,p_mention_scope:'none',p_reply_to:null,p_thread:null});
   if(error){ const e2=$('m'+nonce); if(e2) e2.querySelector('.body').innerHTML+=` <span class="edited" style="color:#ff8080">(${esc(error.message)})</span>`; return; }
-  const e3=$('m'+nonce)||$('m'+data.id); if(e3){ e3.classList.remove('pending'); e3.id='m'+data.id; } seen.add(data.id);
+  // replace the simplified optimistic node with a full render (with action buttons + reactions)
+  const a=$('m'+nonce); if(a) a.remove(); const b=$('m'+data.id); if(b) b.remove();
+  seen.delete('n:'+nonce); seen.delete(data.id);
+  renderMsg(data); scrollDown();
 }
 function scrollDown(){ const m=$('messages'); m.scrollTop=m.scrollHeight; }
 let typingTimer; function showTyping(name){ $('typing').textContent=name+' is typing...'; clearTimeout(typingTimer); typingTimer=setTimeout(()=>$('typing').textContent='',2500); }
