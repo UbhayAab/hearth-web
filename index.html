@@ -119,6 +119,7 @@
       <strong id="hdr">#general</strong>
       <span class="muted" id="hdrtopic"></span>
       <span class="sp"></span>
+      <button class="icon" id="btnActivity" title="Activity">Activity</button>
       <button class="icon" id="btnSearch" title="Search">Search</button>
       <button class="icon" id="btnPins" title="Pinned">Pins</button>
       <button class="icon" id="btnMembers" title="Members"><span class="dot"></span> <span id="onlineCount">1</span></button>
@@ -315,6 +316,7 @@ function renderMsg(m){
   el.innerHTML=`<div class="actions">
       <button class="icon" data-act="react">😊</button>
       <button class="icon" data-act="reply">Reply</button>
+      <button class="icon" data-act="fwd">Fwd</button>
       <button class="icon" data-act="thread">Thread</button>
       <button class="icon" data-act="pin">Pin</button>
       ${m.author_id===me?'<button class="icon" data-act="edit">Edit</button><button class="icon" data-act="del">Del</button>':''}
@@ -329,6 +331,7 @@ function renderMsg(m){
   if(Array.isArray(m.attachments)&&m.attachments.length) hydrateMedia(el);
   el.querySelector('[data-act="react"]').onclick=e=>openEmoji(e,m.id);
   el.querySelector('[data-act="reply"]').onclick=()=>setReply(m);
+  el.querySelector('[data-act="fwd"]').onclick=()=>forwardMsg(m);
   el.querySelector('[data-act="thread"]').onclick=()=>openThread(m);
   el.querySelector('[data-act="pin"]').onclick=()=>sb.rpc('pin_message',{p_message:m.id});
   el.querySelector('#th-'+m.id).onclick=()=>openThread(m);
@@ -364,7 +367,10 @@ function toggleReactionLocal(mid,emoji){ const em=rxnState.get(mid); const has=e
 function openEmoji(e,mid){ const p=$('pop'); p.innerHTML=EMOJIS.map(x=>`<span class="emoji" data-e="${x}">${x}</span>`).join('');
   p.classList.remove('hidden'); p.style.left='12px';
   p.querySelectorAll('.emoji').forEach(s=>s.onclick=()=>{ toggleReactionLocal(mid,s.dataset.e); p.classList.add('hidden'); }); }
-document.addEventListener('click',e=>{ if(!e.target.closest('#pop')&&!e.target.closest('[data-act="react"]')&&!e.target.closest('#composer')) $('pop').classList.add('hidden'); });
+document.addEventListener('click',e=>{ if(!e.target.closest('#pop')&&!e.target.closest('[data-act]')&&!e.target.closest('#composer')) $('pop').classList.add('hidden'); });
+function forwardMsg(m){ const p=$('pop'); const chs=channels.filter(c=>c.kind!=='voice'); p.classList.remove('hidden'); p.style.left='12px';
+  p.innerHTML='<div class="muted" style="padding:2px 8px">Forward to</div>'+chs.map(c=>`<div class="mrow" data-ch="${c.id}"># ${esc(c.name)}</div>`).join('');
+  p.querySelectorAll('.mrow').forEach(el=>el.onclick=async()=>{ p.classList.add('hidden'); await sb.rpc('forward_message',{p_message:m.id,p_to_channel:el.dataset.ch,p_client_msg_id:crypto.randomUUID()}); const ch=channels.find(c=>c.id===el.dataset.ch); if(ch) openChannel(ch); }); }
 
 async function editMsg(m){ const t=prompt('Edit message',m.body_text); if(t==null) return; await sb.rpc('edit_message',{p_message:m.id,p_body:{text:t},p_body_text:t}); }
 // inline reply / quote (uses the existing reply_to_id column)
@@ -411,6 +417,13 @@ $('btnPins').onclick=async()=>{ if(!current) return; panelMode='pins'; $('panel'
   const {data:msgs}=await sb.from('messages').select('*').in('id',ids); c.innerHTML='';
   (msgs||[]).forEach(m=>{ const who=profiles.get(m.author_id)?.display_name||'someone'; const el=document.createElement('div'); el.className='sr'; el.innerHTML=`<div class="muted">${esc(who)}</div><div>${fmt(m.body_text)}</div>`; c.appendChild(el); }); };
 $('btnMembers').onclick=async()=>{ panelMode='members'; $('panel').classList.remove('hidden'); $('panelFooter').classList.add('hidden'); $('panelTitle').textContent='Members'; renderMembersPanel(); };
+$('btnActivity').onclick=async()=>{ panelMode='activity'; $('panel').classList.remove('hidden'); $('panelFooter').classList.add('hidden'); $('panelTitle').textContent='Activity'; const c=$('panelContent'); c.innerHTML='<div class="muted">loading...</div>';
+  const {data,error}=await sb.rpc('get_activity',{p_workspace:ws.id,p_limit:40}); if(error){ c.innerHTML=`<div class="muted">${esc(error.message)}</div>`; return; }
+  if(!data||!data.length){ c.innerHTML='<div class="muted">Nothing yet. Mentions, reactions and thread replies show up here.</div>'; return; }
+  c.innerHTML=''; for(const a of data){ const who=profiles.get(a.actor_id)?.display_name||'someone'; const ch=channels.find(x=>x.id===a.channel_id);
+    const label=a.kind==='mention'?`<b>${esc(who)}</b> mentioned you`:a.kind==='reaction'?`<b>${esc(who)}</b> reacted to your message`:`<b>${esc(who)}</b> replied in a thread`;
+    const el=document.createElement('div'); el.className='sr'; el.innerHTML=`<div class="muted">${label} in #${esc(ch?.name||'?')} · ${timeOf(a.created_at)}</div><div>${fmt((a.snippet||'').slice(0,120))}</div>`;
+    el.onclick=()=>{ if(ch) openChannel(ch); }; c.appendChild(el); } };
 function renderMembersPanel(){ if(panelMode!=='members') return; const c=$('panelContent'); c.innerHTML='';
   [...profiles.values()].forEach(p=>{ const el=document.createElement('div'); el.className='member';
     el.innerHTML=`<span class="dot" style="background:${online.has(p.id)?'var(--green)':'#555'}"></span>${esc(p.display_name||p.username||'user')}`;
