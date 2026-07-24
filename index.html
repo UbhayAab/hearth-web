@@ -48,12 +48,31 @@
   .rxns { display:flex; gap:4px; flex-wrap:wrap; margin:2px 0 0; }
   .rxn { background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:0 7px; font-size:12px; cursor:pointer; }
   .rxn.mine { border-color:var(--accent); background:#22304d; }
+  .quote { border-left:3px solid var(--accent); padding:1px 8px; margin:0 0 2px; color:var(--dim); font-size:12px; opacity:.85; }
+  #replyBar { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:5px 10px; margin-bottom:6px; font-size:12px; color:var(--dim); display:flex; align-items:center; gap:8px; }
   .threadind { color:var(--accent); font-size:12px; cursor:pointer; margin-top:2px; display:inline-block; }
   .threadind:hover { text-decoration:underline; }
   .edited { color:var(--dim); font-size:11px; }
   #typing { height:16px; padding:0 16px; color:var(--dim); font-size:12px; }
   footer { padding:10px 12px; border-top:1px solid var(--line); background:var(--panel); position:relative; }
   footer textarea { resize:none; height:42px; }
+  .crow { display:flex; gap:8px; align-items:flex-end; } .crow textarea { flex:1; }
+  .attach { font-size:18px; padding:8px 6px; }
+  /* attachments in messages */
+  .atts { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 2px; }
+  .att-img { max-width:280px; max-height:320px; border-radius:10px; overflow:hidden; cursor:pointer; background:var(--panel2); border:1px solid var(--line); }
+  .att-img img { display:block; width:100%; height:100%; object-fit:cover; }
+  .att-file { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; }
+  .att-file:hover { border-color:var(--accent); }
+  #attachChips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
+  .chip { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:4px 8px; font-size:12px; display:flex; align-items:center; gap:6px; }
+  .chip .x { cursor:pointer; color:var(--dim); } .chip.up { opacity:.6; }
+  #drophint { position:fixed; inset:0; background:#0b0d12dd; border:3px dashed var(--accent); display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--accent); z-index:50; pointer-events:none; }
+  /* in-app lightbox - never hands off */
+  .lightbox { position:fixed; inset:0; background:#000000ee; z-index:60; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  .lightbox img { max-width:94vw; max-height:88vh; object-fit:contain; border-radius:6px; transition:transform .05s; }
+  .lb-bar { position:fixed; top:14px; right:16px; display:flex; gap:10px; }
+  .lb-bar button { background:#1e222bcc; }
   /* right panel */
   aside { width:340px; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; flex:none; }
   aside.hidden { display:none; }
@@ -122,8 +141,12 @@
         <div id="typing"></div>
         <footer>
           <div id="pop" class="pop hidden"></div>
-          <textarea id="composer" placeholder="Message"></textarea>
+          <div id="replyBar" class="hidden"></div>
+          <div id="attachChips" class="hidden"></div>
+          <div class="crow"><button class="icon attach" id="attachBtn" title="Attach">📎</button><textarea id="composer" placeholder="Message"></textarea></div>
+          <input type="file" id="fileInput" multiple accept="image/*,video/*,.pdf,.txt,.zip" style="display:none">
         </footer>
+        <div id="drophint" class="hidden">Drop to upload</div>
       </section>
       <aside id="panel" class="hidden">
         <header><strong id="panelTitle">Thread</strong><span class="sp"></span><button class="icon" id="panelClose">Close</button></header>
@@ -159,6 +182,8 @@ const timeOf=d=>new Date(d||Date.now()).toLocaleTimeString([],{hour:'2-digit',mi
 
 let me=null, ws=null, channels=[], current=null, currentDM=null;
 const profiles=new Map(); const seen=new Set(); const renderedIds=new Set(); const rootThreads=new Map(); // rootMsgId -> {threadId, count}
+const msgCache=new Map(); let replyTarget=null;
+let pendingAttachments=[]; const mediaUrlCache=new Map();
 let chanSub=null, typSub=null, userSub=null, dmSub=null;
 let panelMode=null, panelThread=null;
 let chanCursor=0;
@@ -282,28 +307,34 @@ function onIncoming(m){
 function renderMsg(m){
   const nonce=m.client_msg_id;
   if(nonce&&seen.has('n:'+nonce)){ const ex=$('m'+nonce); if(ex){ex.classList.remove('pending'); if(m.id) ex.id='m'+m.id;} if(m.id) seen.add(m.id); return; }
-  if(m.id&&seen.has(m.id)) return; if(m.id){ seen.add(m.id); renderedIds.add(m.id); } if(nonce) seen.add('n:'+nonce);
+  if(m.id&&seen.has(m.id)) return; if(m.id){ seen.add(m.id); renderedIds.add(m.id); msgCache.set(m.id,{author_id:m.author_id,body_text:m.body_text}); } if(nonce) seen.add('n:'+nonce);
   const who=profiles.get(m.author_id)?.display_name||profiles.get(m.author_id)?.username||'someone';
   const mentioned=Array.isArray(m.mention_user_ids)&&m.mention_user_ids.includes(me);
   const el=document.createElement('div'); el.className='msg'+(m.author_id===me?' me':'')+(mentioned?' mention':''); if(m.id) el.id='m'+m.id;
   const th=rootThreads.get(m.id);
   el.innerHTML=`<div class="actions">
       <button class="icon" data-act="react">😊</button>
+      <button class="icon" data-act="reply">Reply</button>
       <button class="icon" data-act="thread">Thread</button>
       <button class="icon" data-act="pin">Pin</button>
       ${m.author_id===me?'<button class="icon" data-act="edit">Edit</button><button class="icon" data-act="del">Del</button>':''}
     </div>
+    ${m.reply_to_id?`<div class="quote" id="q-${m.id}">replying...</div>`:''}
     <span class="who">${esc(who)}</span><span class="t">${timeOf(m.created_at)}</span>
     <div class="body">${fmt(m.body_text)}${m.edited_at?' <span class="edited">(edited)</span>':''}</div>
+    ${attsHtml(m)}
     <div class="rxns" id="rx-${m.id}"></div>
     <span class="threadind" id="th-${m.id}" style="${th?'':'display:none'}">💬 ${th?th.count:0} replies</span>`;
   $('messages').appendChild(el);
+  if(Array.isArray(m.attachments)&&m.attachments.length) hydrateMedia(el);
   el.querySelector('[data-act="react"]').onclick=e=>openEmoji(e,m.id);
+  el.querySelector('[data-act="reply"]').onclick=()=>setReply(m);
   el.querySelector('[data-act="thread"]').onclick=()=>openThread(m);
   el.querySelector('[data-act="pin"]').onclick=()=>sb.rpc('pin_message',{p_message:m.id});
   el.querySelector('#th-'+m.id).onclick=()=>openThread(m);
   const ed=el.querySelector('[data-act="edit"]'); if(ed) ed.onclick=()=>editMsg(m);
   const dl=el.querySelector('[data-act="del"]'); if(dl) dl.onclick=()=>sb.rpc('delete_message',{p_message:m.id});
+  if(m.reply_to_id) fillQuote(m.id,m.reply_to_id);
 }
 function bumpThread(threadId){ for(const [root,t] of rootThreads){ if(t.threadId===threadId){ t.count++; const el=$('th-'+root); if(el){el.style.display=''; el.textContent=`💬 ${t.count} replies`;} return; } } }
 
@@ -336,6 +367,15 @@ function openEmoji(e,mid){ const p=$('pop'); p.innerHTML=EMOJIS.map(x=>`<span cl
 document.addEventListener('click',e=>{ if(!e.target.closest('#pop')&&!e.target.closest('[data-act="react"]')&&!e.target.closest('#composer')) $('pop').classList.add('hidden'); });
 
 async function editMsg(m){ const t=prompt('Edit message',m.body_text); if(t==null) return; await sb.rpc('edit_message',{p_message:m.id,p_body:{text:t},p_body_text:t}); }
+// inline reply / quote (uses the existing reply_to_id column)
+function setReply(m){ replyTarget={id:m.id}; const who=profiles.get(m.author_id)?.display_name||'someone';
+  const bar=$('replyBar'); bar.classList.remove('hidden');
+  bar.innerHTML=`<span>Replying to <b style="color:var(--text)">${esc(who)}</b>: ${esc((msgCache.get(m.id)?.body_text||'').slice(0,60))}</span><span class="sp" style="flex:1"></span><button class="icon" id="cancelReply">✕</button>`;
+  $('cancelReply').onclick=clearReply; $('composer').focus(); }
+function clearReply(){ replyTarget=null; const b=$('replyBar'); b.classList.add('hidden'); b.innerHTML=''; }
+async function fillQuote(msgId,replyToId){ const el=$('q-'+msgId); if(!el) return; let ref=msgCache.get(replyToId);
+  if(!ref){ const {data}=await sb.from('messages').select('author_id,body_text').eq('id',replyToId).maybeSingle(); if(data){ ref=data; msgCache.set(replyToId,data); } }
+  const who=ref?(profiles.get(ref.author_id)?.display_name||'someone'):''; el.innerHTML=ref?`↩ <b>${esc(who)}</b> ${esc((ref.body_text||'').slice(0,90))}`:'↩ a message'; }
 
 // ---------------- threads (right panel) ----------------
 async function openThread(m){
@@ -389,7 +429,8 @@ async function openDM(convId){ current=null; currentDM=convId; closePanel(); see
 function renderDM(m){ const nonce=m.client_msg_id; if(nonce&&seen.has('n:'+nonce)){ const ex=$('m'+nonce); if(ex&&m.id) ex.id='m'+m.id; if(m.id) seen.add(m.id); return; }
   if(m.id&&seen.has(m.id)) return; if(m.id) seen.add(m.id); if(nonce) seen.add('n:'+nonce);
   const who=profiles.get(m.author_id)?.display_name||'someone'; const el=document.createElement('div'); el.className='msg'+(m.author_id===me?' me':''); if(m.id) el.id='m'+m.id;
-  el.innerHTML=`<span class="who">${esc(who)}</span><span class="t">${timeOf(m.created_at)}</span><div class="body">${fmt(m.body_text)}</div>`; $('messages').appendChild(el); }
+  el.innerHTML=`<span class="who">${esc(who)}</span><span class="t">${timeOf(m.created_at)}</span><div class="body">${fmt(m.body_text)}</div>${attsHtml(m)}`; $('messages').appendChild(el);
+  if(Array.isArray(m.attachments)&&m.attachments.length) hydrateMedia(el); }
 
 // ---------------- composer + mentions ----------------
 const composer=$('composer');
@@ -408,14 +449,19 @@ function insertMention(u){ composer.value=composer.value.replace(/@(\w*)$/,'@'+u
 function resolveMentions(text){ const out=[]; const by=new Map();
   for(const p of profiles.values()){ if(p.username) by.set(('@'+p.username).toLowerCase(),p.id); if(p.display_name) by.set(('@'+p.display_name).toLowerCase(),p.id); }
   (text.match(/@[\w]+/g)||[]).forEach(t=>{ const id=by.get(t.toLowerCase()); if(id&&!out.includes(id)) out.push(id); }); return out; }
-async function send(){ const text=composer.value.trim(); if(!text) return; composer.value=''; hideMention();
+async function send(){ const text=composer.value.trim();
+  if(pendingAttachments.some(a=>a.uploading)){ return; } // wait for uploads
+  const atts=pendingAttachments.filter(a=>a.object_key).map(a=>({object_key:a.object_key,mime:a.mime,width:a.width,height:a.height,name:a.name,size:a.size}));
+  if(!text && !atts.length) return; composer.value=''; hideMention(); pendingAttachments=[]; renderChips();
+  const attJson=JSON.stringify(atts);
   if(currentDM){ const nonce=crypto.randomUUID(); seen.add('n:'+nonce);
-    const el=document.createElement('div'); el.className='msg me pending'; el.id='m'+nonce; el.innerHTML=`<span class="who">${esc(profiles.get(me)?.display_name||'you')}</span><span class="t">now</span><div class="body">${fmt(text)}</div>`; $('messages').appendChild(el); scrollDown();
-    const {data,error}=await sb.rpc('send_dm',{p_conversation:currentDM,p_client_msg_id:nonce,p_body:{text},p_body_text:text}); if(!error&&data){ const e3=$('m'+nonce); if(e3){e3.classList.remove('pending'); e3.id='m'+data.id;} seen.add(data.id); } return; }
+    const el=document.createElement('div'); el.className='msg me pending'; el.id='m'+nonce; el.innerHTML=`<span class="who">${esc(profiles.get(me)?.display_name||'you')}</span><span class="t">now</span><div class="body">${fmt(text)}</div>${attsHtml({attachments:atts})}`; $('messages').appendChild(el); if(atts.length) hydrateMedia(el); scrollDown();
+    const {data,error}=await sb.rpc('send_dm',{p_conversation:currentDM,p_client_msg_id:nonce,p_body:{text},p_body_text:text,p_attachments:atts}); if(!error&&data){ const e3=$('m'+nonce); if(e3){e3.classList.remove('pending'); e3.id='m'+data.id;} seen.add(data.id); } return; }
   if(!current) return; const mentions=resolveMentions(text); const nonce=crypto.randomUUID(); seen.add('n:'+nonce);
+  const rt=replyTarget?replyTarget.id:null; clearReply();
   const el=document.createElement('div'); el.className='msg me pending'; el.id='m'+nonce;
-  el.innerHTML=`<span class="who">${esc(profiles.get(me)?.display_name||'you')}</span><span class="t">now</span><div class="body">${fmt(text)}</div><div class="rxns" id="rx-${nonce}"></div>`; $('messages').appendChild(el); scrollDown();
-  const {data,error}=await sb.rpc('send_message',{p_channel:current.id,p_client_msg_id:nonce,p_body:{text},p_body_text:text,p_mentions:mentions,p_mention_scope:'none',p_reply_to:null,p_thread:null});
+  el.innerHTML=`<span class="who">${esc(profiles.get(me)?.display_name||'you')}</span><span class="t">now</span><div class="body">${fmt(text)}</div>${attsHtml({attachments:atts})}<div class="rxns" id="rx-${nonce}"></div>`; $('messages').appendChild(el); if(atts.length) hydrateMedia(el); scrollDown();
+  const {data,error}=await sb.rpc('send_message',{p_channel:current.id,p_client_msg_id:nonce,p_body:{text},p_body_text:text,p_attachments:atts,p_mentions:mentions,p_mention_scope:'none',p_reply_to:rt,p_thread:null});
   if(error){ const e2=$('m'+nonce); if(e2) e2.querySelector('.body').innerHTML+=` <span class="edited" style="color:#ff8080">(${esc(error.message)})</span>`; return; }
   // replace the simplified optimistic node with a full render (with action buttons + reactions)
   const a=$('m'+nonce); if(a) a.remove(); const b=$('m'+data.id); if(b) b.remove();
@@ -423,6 +469,57 @@ async function send(){ const text=composer.value.trim(); if(!text) return; compo
   renderMsg(data); scrollDown();
 }
 function scrollDown(){ const m=$('messages'); m.scrollTop=m.scrollHeight; }
+
+// ---------------- MEDIA (upload, inline render, in-app viewer - never hands off) ----------------
+const token=async()=>(await sb.auth.getSession()).data.session.access_token;
+const fmtSize=n=>n>1048576?(n/1048576).toFixed(1)+' MB':n>1024?(n/1024).toFixed(0)+' KB':n+' B';
+async function sha256hex(buf){ const h=await crypto.subtle.digest('SHA-256',buf); return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
+function imageDims(file){ if(!(file.type||'').startsWith('image/')) return Promise.resolve(null);
+  return new Promise(res=>{ const u=URL.createObjectURL(file); const img=new Image(); img.onload=()=>{ res({w:img.naturalWidth,h:img.naturalHeight}); URL.revokeObjectURL(u); }; img.onerror=()=>{ res(null); URL.revokeObjectURL(u); }; img.src=u; }); }
+async function uploadFile(file){
+  const buf=await file.arrayBuffer(); const sha=await sha256hex(buf); const d=await imageDims(file);
+  const res=await fetch(SUPABASE_URL+'/functions/v1/mint-upload',{method:'POST',headers:{Authorization:'Bearer '+await token(),apikey:PUBLISHABLE,'Content-Type':'application/json'},
+    body:JSON.stringify({workspace_id:ws.id,mime:file.type||'application/octet-stream',byte_size:file.size,sha256:sha})});
+  const j=await res.json(); if(!res.ok) throw new Error(j.error||'mint failed');
+  if(!j.deduped){ const {error}=await sb.storage.from('attachments').uploadToSignedUrl(j.object_key,j.token,file); if(error) throw error;
+    await sb.rpc('finalize_attachment',{p_object_key:j.object_key,p_sha256:'\\x'+sha,p_mime:file.type||'application/octet-stream',p_byte_size:file.size,p_width:d?.w||null,p_height:d?.h||null,p_duration_ms:null,p_thumbhash:null}); }
+  return {object_key:j.object_key,mime:file.type||'application/octet-stream',width:d?.w,height:d?.h,name:file.name,size:file.size};
+}
+async function mediaUrl(key){ if(mediaUrlCache.has(key)) return mediaUrlCache.get(key);
+  const res=await fetch(SUPABASE_URL+'/functions/v1/mint-download',{method:'POST',headers:{Authorization:'Bearer '+await token(),apikey:PUBLISHABLE,'Content-Type':'application/json'},body:JSON.stringify({object_key:key})});
+  const j=await res.json(); if(!res.ok||!j.url) return null; mediaUrlCache.set(key,j.url); setTimeout(()=>mediaUrlCache.delete(key),250000); return j.url; }
+function attsHtml(m){ const a=Array.isArray(m.attachments)?m.attachments:[]; if(!a.length) return '';
+  return '<div class="atts">'+a.map(x=>{ if((x.mime||'').startsWith('image/')) return `<div class="att-img" data-key="${esc(x.object_key)}" style="width:${Math.min(280,x.width||280)}px;aspect-ratio:${x.width&&x.height?x.width+'/'+x.height:'4/3'}"><img loading="lazy"></div>`;
+    return `<div class="att-file" data-key="${esc(x.object_key)}" data-name="${esc(x.name||'file')}">📎 ${esc(x.name||'file')} <span class="muted">${fmtSize(x.size||0)}</span></div>`; }).join('')+'</div>'; }
+async function hydrateMedia(el){ for(const box of el.querySelectorAll('.att-img')){ const key=box.dataset.key; const url=await mediaUrl(key); if(url){ box.querySelector('img').src=url; box.onclick=()=>openLightbox(url); } }
+  for(const fc of el.querySelectorAll('.att-file')){ fc.onclick=async()=>{ const url=await mediaUrl(fc.dataset.key); if(url) saveBlob(url,fc.dataset.name); }; } }
+function openLightbox(url){ const lb=document.createElement('div'); lb.className='lightbox';
+  lb.innerHTML=`<img src="${url}"><div class="lb-bar"><button id="lbSave">Save</button><button id="lbClose">Close</button></div>`;
+  let scale=1; const img=lb.querySelector('img');
+  lb.querySelector('#lbClose').onclick=()=>lb.remove();
+  lb.querySelector('#lbSave').onclick=()=>saveBlob(url,'image');
+  img.onclick=e=>{ e.stopPropagation(); scale=scale>1?1:2; img.style.transform=`scale(${scale})`; }; // double-tap-ish zoom
+  lb.onclick=e=>{ if(e.target===lb) lb.remove(); };
+  document.addEventListener('keydown',function esc(e){ if(e.key==='Escape'){ lb.remove(); document.removeEventListener('keydown',esc); } });
+  document.body.appendChild(lb); }
+async function saveBlob(url,name){ try{ const b=await(await fetch(url)).blob(); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=name||'download'; a.click(); setTimeout(()=>URL.revokeObjectURL(u),1000); }catch{} }
+
+// composer attach + paste + drag
+function renderChips(){ const c=$('attachChips'); if(!pendingAttachments.length){ c.classList.add('hidden'); c.innerHTML=''; return; } c.classList.remove('hidden');
+  c.innerHTML=pendingAttachments.map((a,i)=>`<span class="chip ${a.uploading?'up':''}">${(a.mime||'').startsWith('image/')?'🖼':'📎'} ${esc(a.name||'file')}${a.uploading?' ...':''} <span class="x" data-i="${i}">✕</span></span>`).join('');
+  c.querySelectorAll('.x').forEach(x=>x.onclick=()=>{ pendingAttachments.splice(+x.dataset.i,1); renderChips(); }); }
+async function addFiles(files){ for(const f of files){ if(f.size>50*1024*1024){ alert('Max 50MB: '+f.name); continue; }
+  const stub={name:f.name,mime:f.type,size:f.size,uploading:true}; pendingAttachments.push(stub); renderChips();
+  try{ const a=await uploadFile(f); Object.assign(stub,a,{uploading:false}); }catch(e){ pendingAttachments=pendingAttachments.filter(x=>x!==stub); alert('Upload failed: '+e.message); } renderChips(); } }
+$('attachBtn').onclick=()=>$('fileInput').click();
+$('fileInput').onchange=e=>{ addFiles([...e.target.files]); e.target.value=''; };
+$('composer').addEventListener('paste',e=>{ const imgs=[...e.clipboardData.items].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean); if(imgs.length){ e.preventDefault(); addFiles(imgs); } });
+(function dnd(){ let cnt=0; const hint=$('drophint');
+  window.addEventListener('dragover',e=>e.preventDefault());
+  window.addEventListener('dragenter',e=>{ e.preventDefault(); if([...e.dataTransfer.types].includes('Files')){ cnt++; hint.classList.remove('hidden'); } });
+  window.addEventListener('dragleave',e=>{ if(--cnt<=0){ cnt=0; hint.classList.add('hidden'); } });
+  window.addEventListener('drop',e=>{ e.preventDefault(); cnt=0; hint.classList.add('hidden'); if(e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
+})();
 let typingTimer; function showTyping(name){ $('typing').textContent=name+' is typing...'; clearTimeout(typingTimer); typingTimer=setTimeout(()=>$('typing').textContent='',2500); }
 
 // ---------------- presence ----------------
