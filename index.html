@@ -140,7 +140,7 @@ const fmt=t=>esc(t).replace(/(^|\s)(@[\w]+)/g,'$1<span class="tag">$2</span>');
 const timeOf=d=>new Date(d||Date.now()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 
 let me=null, ws=null, channels=[], current=null, currentDM=null;
-const profiles=new Map(); const seen=new Set(); const rootThreads=new Map(); // rootMsgId -> {threadId, count}
+const profiles=new Map(); const seen=new Set(); const renderedIds=new Set(); const rootThreads=new Map(); // rootMsgId -> {threadId, count}
 let chanSub=null, typSub=null, userSub=null, dmSub=null;
 let panelMode=null, panelThread=null;
 let chanCursor=0;
@@ -155,6 +155,8 @@ async function reconcileChannel(){ if(!current) return;
     if(m.thread_id&&!rootThreads.has(m.id)){ bumpThread(m.thread_id); if(panelMode==='thread'&&panelThread&&panelThread.id===m.thread_id) appendThreadMsg(m); continue; }
     renderMsg(m); }
   loadReactions(data.map(m=>m.id)); scrollDown(); }
+// keep reactions eventually-consistent for everyone (a missed reaction broadcast is re-fetched)
+setInterval(()=>{ if(renderedIds.size) loadReactions([...renderedIds].slice(-50)); }, 7000);
 
 // ---------------- auth ----------------
 $('guestBtn').onclick=async()=>{ const name=$('name').value.trim()||'Guest '+Math.floor(Math.random()*9000+1000); busy(true);
@@ -262,7 +264,7 @@ function onIncoming(m){
 function renderMsg(m){
   const nonce=m.client_msg_id;
   if(nonce&&seen.has('n:'+nonce)){ const ex=$('m'+nonce); if(ex){ex.classList.remove('pending'); if(m.id) ex.id='m'+m.id;} if(m.id) seen.add(m.id); return; }
-  if(m.id&&seen.has(m.id)) return; if(m.id) seen.add(m.id); if(nonce) seen.add('n:'+nonce);
+  if(m.id&&seen.has(m.id)) return; if(m.id){ seen.add(m.id); renderedIds.add(m.id); } if(nonce) seen.add('n:'+nonce);
   const who=profiles.get(m.author_id)?.display_name||profiles.get(m.author_id)?.username||'someone';
   const mentioned=Array.isArray(m.mention_user_ids)&&m.mention_user_ids.includes(me);
   const el=document.createElement('div'); el.className='msg'+(m.author_id===me?' me':'')+(mentioned?' mention':''); if(m.id) el.id='m'+m.id;
