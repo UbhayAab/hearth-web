@@ -309,7 +309,8 @@ function renderRxnsFromState(mid){ const el=$('rx-'+mid); if(!el) return; const 
   el.innerHTML=h; el.querySelectorAll('.rxn').forEach(s=>s.onclick=()=>toggleReactionLocal(mid,s.dataset.e)); }
 // optimistic toggle: reflect locally now, then persist (broadcast echo reconciles others)
 function toggleReactionLocal(mid,emoji){ const em=rxnState.get(mid); const has=em&&em.get(emoji)&&em.get(emoji).has(me);
-  applyReaction({message_id:mid,emoji,user_id:me,added:!has}); sb.rpc('toggle_reaction',{p_message:mid,p_emoji:emoji}).catch(()=>{}); }
+  applyReaction({message_id:mid,emoji,user_id:me,added:!has});
+  sb.rpc('toggle_reaction',{p_message:mid,p_emoji:emoji}).then(({error})=>{ if(error) console.log('REACT_ERR',mid,error.message); }); }
 
 function openEmoji(e,mid){ const p=$('pop'); p.innerHTML=EMOJIS.map(x=>`<span class="emoji" data-e="${x}">${x}</span>`).join('');
   p.classList.remove('hidden'); p.style.left='12px';
@@ -358,7 +359,7 @@ function renderMembersPanel(){ if(panelMode!=='members') return; const c=$('pane
     el.onclick=()=>{ if(p.id!==me) startDM(p.id); }; c.appendChild(el); }); }
 
 // ---------------- DMs ----------------
-async function newDM(){ const others=[...profiles.values()].filter(p=>p.id!==me); if(!others.length) return alert('No one else here yet - open a second tab'); startDM(others[0].id); }
+async function newDM(){ await loadMembers(); const others=[...profiles.values()].filter(p=>p.id!==me); if(!others.length) return alert('No one else here yet - open a second tab'); startDM(others[0].id); }
 async function startDM(userId){ const {data,error}=await sb.rpc('create_dm',{p_workspace:ws.id,p_users:[userId]}); if(error) return; openDM(data.id); renderChannels(); }
 async function openDM(convId){ current=null; currentDM=convId; closePanel(); seen.clear();
   const other=await dmOther(convId); $('hdr').textContent='@ '+other; $('hdrtopic').textContent=''; $('composer').placeholder='Message '+other; renderChannels();
