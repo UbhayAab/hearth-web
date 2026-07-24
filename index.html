@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hearth - live demo</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a; --text:#e6e8ec; --dim:#9aa3b2; --accent:#5b8cff; --me:#243049; --mention:#3a2f12; }
+  * { box-sizing: border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif; }
+  #app { display:flex; flex-direction:column; height:100dvh; }
+  button { cursor:pointer; border:none; border-radius:8px; padding:9px 14px; background:var(--accent); color:#fff; font-weight:600; }
+  button.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  input, textarea { background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px 12px; font:inherit; width:100%; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .center { max-width:380px; margin:8vh auto; padding:24px; background:var(--panel); border:1px solid var(--line); border-radius:14px; }
+  .center h1 { margin:0 0 4px; font-size:22px; } .center p { color:var(--dim); margin:0 0 18px; }
+  .muted { color:var(--dim); font-size:12px; }
+  .hidden { display:none !important; }
+  /* chat layout */
+  header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); }
+  header .sp { flex:1; } .dot { width:8px; height:8px; border-radius:50%; background:#3ecf8e; display:inline-block; }
+  main { flex:1; display:flex; min-height:0; }
+  nav { width:200px; background:var(--panel); border-right:1px solid var(--line); padding:10px; overflow:auto; }
+  nav h3 { font-size:11px; text-transform:uppercase; color:var(--dim); margin:12px 6px 6px; letter-spacing:.5px; }
+  .chan { padding:7px 10px; border-radius:7px; color:var(--dim); cursor:pointer; }
+  .chan:hover { background:var(--panel2); } .chan.active { background:var(--me); color:var(--text); }
+  .member { padding:4px 6px; color:var(--dim); font-size:13px; } .member .dot { margin-right:6px; }
+  section { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #messages { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:2px; }
+  .msg { padding:4px 8px; border-radius:8px; max-width:820px; }
+  .msg:hover { background:var(--panel); }
+  .msg .who { font-weight:700; margin-right:8px; } .msg .t { color:var(--dim); font-size:11px; }
+  .msg.me { background:var(--me); } .msg.mention { background:var(--mention); }
+  .msg .body { white-space:pre-wrap; word-break:break-word; } .msg .body .tag { color:var(--accent); font-weight:600; }
+  .pending { opacity:.55; } .edited { color:var(--dim); font-size:11px; }
+  #typing { height:18px; padding:0 16px; color:var(--dim); font-size:12px; }
+  footer { padding:10px 14px; border-top:1px solid var(--line); background:var(--panel); }
+  footer textarea { resize:none; height:44px; }
+  @media (max-width:640px){ nav{ display:none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- AUTH -->
+  <div id="auth" class="center">
+    <h1>Hearth</h1>
+    <p>Live realtime chat demo. Open in two tabs and watch it sync.</p>
+    <div id="authName" class="row" style="margin-bottom:10px"><input id="name" placeholder="Your display name" maxlength="40" /></div>
+    <button id="guestBtn" style="width:100%; margin-bottom:16px">Continue as guest</button>
+    <div class="muted" style="text-align:center; margin-bottom:12px">or sign in with email + OTP</div>
+    <div id="otpEmail" class="row" style="margin-bottom:8px"><input id="email" type="email" placeholder="you@email.com" /></div>
+    <button id="otpSend" class="ghost" style="width:100%">Email me a code</button>
+    <div id="otpVerify" class="hidden" style="margin-top:12px">
+      <div class="row" style="margin-bottom:8px"><input id="code" placeholder="Enter the code" inputmode="numeric" /></div>
+      <button id="otpVerifyBtn" style="width:100%">Verify & sign in</button>
+      <p class="muted" style="margin-top:8px">Demo email is rate limited and may be slow or land in spam. If it does not arrive, use Continue as guest.</p>
+    </div>
+    <div id="authErr" class="muted" style="color:#ff8080; margin-top:10px"></div>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat" class="hidden" style="display:flex; flex-direction:column; height:100%">
+    <header>
+      <strong id="wsName">Hearth Demo</strong>
+      <span class="sp"></span>
+      <span class="muted"><span class="dot"></span> <span id="onlineCount">1</span> online</span>
+      <span class="muted" id="meName" style="margin-left:12px"></span>
+      <button class="ghost" id="signout" style="margin-left:12px; padding:6px 10px">Sign out</button>
+    </header>
+    <main>
+      <nav>
+        <h3>Channels</h3>
+        <div id="channels"></div>
+        <h3>Members</h3>
+        <div id="members"></div>
+      </nav>
+      <section>
+        <div id="messages"></div>
+        <div id="typing"></div>
+        <footer>
+          <textarea id="composer" placeholder="Message #general    (type @ to mention)"></textarea>
+        </footer>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
+
+const SUPABASE_URL = 'https://ybddogqphinruyunnuwx.supabase.co';
+const PUBLISHABLE  = 'sb_publishable_5gyvKj8AtZeXGDWVLYg3VA_Uwh4T4RD';
+const DEMO_TOKEN   = 'hearth-demo-open-2026';
+
+const sb = createClient(SUPABASE_URL, PUBLISHABLE, {
+  auth: { autoRefreshToken: true, persistSession: true },
+  realtime: { params: { eventsPerSecond: 20 } },
+});
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+let me = null, ws = null, channels = [], current = null;
+const profiles = new Map();       // user_id -> {display_name, username}
+let chanSub = null, typSub = null, userSub = null;
+const seen = new Set();           // message ids rendered (dedupe optimistic+realtime)
+
+// ---------- auth ----------
+$('guestBtn').onclick = async () => {
+  const name = $('name').value.trim() || 'Guest ' + Math.floor(Math.random()*9000+1000);
+  authBusy(true);
+  const { error } = await sb.auth.signInAnonymously();
+  if (error) return authErr(error.message);
+  await sb.rpc('set_profile', { p_display_name: name, p_avatar_key: null, p_pronouns: null, p_status_text: null, p_status_emoji: null, p_timezone: 'Asia/Kolkata' });
+  await enter();
+};
+$('otpSend').onclick = async () => {
+  const email = $('email').value.trim(); if (!email) return authErr('Enter an email');
+  authBusy(true, 'otp');
+  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  authBusy(false, 'otp');
+  if (error) return authErr(error.message);
+  $('otpVerify').classList.remove('hidden'); authErr('');
+};
+$('otpVerifyBtn').onclick = async () => {
+  const email = $('email').value.trim(), token = $('code').value.trim();
+  authBusy(true);
+  const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
+  if (error) return authErr(error.message);
+  const name = $('name').value.trim();
+  if (name) await sb.rpc('set_profile', { p_display_name: name, p_avatar_key:null, p_pronouns:null, p_status_text:null, p_status_emoji:null, p_timezone:'Asia/Kolkata' });
+  await enter();
+};
+$('signout').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+function authErr(m){ $('authErr').textContent = m; authBusy(false); authBusy(false,'otp'); }
+function authBusy(b, which){ const btn = which==='otp'?$('otpSend'):$('guestBtn'); btn.disabled=b; btn.textContent = b ? '...' : (which==='otp'?'Email me a code':'Continue as guest'); }
+
+// ---------- enter the workspace ----------
+async function enter() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return authErr('No session');
+  me = session.user.id;
+  sb.realtime.setAuth(session.access_token);
+
+  // join the demo space (idempotent)
+  const { error: joinErr } = await sb.rpc('redeem_invite', { p_token: DEMO_TOKEN });
+  if (joinErr && !/already|conflict/i.test(joinErr.message)) { /* may already be a member */ }
+
+  const { data: wsRows } = await sb.from('workspaces').select('*').limit(1);
+  ws = wsRows && wsRows[0];
+  if (!ws) return authErr('Could not load the demo space');
+
+  const { data: chans } = await sb.from('channels').select('*').eq('workspace_id', ws.id).order('position');
+  channels = chans || [];
+  await loadMembers();
+
+  $('auth').classList.add('hidden'); $('chat').classList.remove('hidden');
+  $('meName').textContent = profiles.get(me)?.display_name || 'you';
+  renderChannels();
+  subscribeUser(session.access_token);
+  heartbeatLoop();
+  presenceLoop();
+  if (channels.length) openChannel(channels.find(c => c.name === 'general') || channels[0]);
+}
+
+async function loadMembers() {
+  const { data: members } = await sb.from('workspace_members').select('user_id').eq('workspace_id', ws.id);
+  const ids = (members || []).map(m => m.user_id);
+  if (ids.length) {
+    const { data: profs } = await sb.from('profiles').select('id,display_name,username').in('id', ids);
+    (profs || []).forEach(p => profiles.set(p.id, p));
+  }
+}
+
+function renderChannels() {
+  $('channels').innerHTML = '';
+  channels.filter(c => c.kind !== 'voice').forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'chan' + (current && c.id === current.id ? ' active' : '');
+    el.textContent = '# ' + c.name;
+    el.onclick = () => openChannel(c);
+    $('channels').appendChild(el);
+  });
+  const mem = $('members'); mem.innerHTML = '';
+  [...profiles.values()].forEach(p => {
+    const el = document.createElement('div'); el.className = 'member';
+    el.innerHTML = `<span class="dot" style="background:${online.has(p.id)?'#3ecf8e':'#555'}"></span>${esc(p.display_name || p.username || 'user')}`;
+    el.onclick = () => { const c = $('composer'); c.value += '@' + (p.username || p.display_name) + ' '; c.focus(); };
+    mem.appendChild(el);
+  });
+}
+
+// ---------- channel + messages ----------
+async function openChannel(c) {
+  current = c; seen.clear();
+  $('composer').placeholder = 'Message #' + c.name + '    (type @ to mention)';
+  renderChannels();
+  $('messages').innerHTML = '<div class="muted" style="margin:auto">loading...</div>';
+
+  const { data: msgs, error } = await sb.rpc('get_channel_messages', { p_channel: c.id, p_limit: 50 });
+  if (error) { $('messages').innerHTML = `<div class="muted" style="margin:auto">${esc(error.message)}</div>`; return; }
+  const ordered = (msgs || []).slice().reverse();
+  $('messages').innerHTML = '';
+  for (const m of ordered) renderMessage(m);
+  scrollDown();
+  if (ordered.length) sb.rpc('mark_read', { p_scope_type:'channel', p_scope_id:c.id, p_up_to_seq: ordered[ordered.length-1].seq });
+
+  // (re)subscribe realtime for this channel
+  if (chanSub) sb.removeChannel(chanSub);
+  if (typSub) sb.removeChannel(typSub);
+  chanSub = sb.channel('ch:' + c.id, { config: { private: true } });
+  chanSub.on('broadcast', { event: 'msg' }, ({ payload }) => { if (payload.channel_id === current?.id) { renderMessage(payload); scrollDown(); sb.rpc('mark_read',{p_scope_type:'channel',p_scope_id:c.id,p_up_to_seq:payload.seq}); } });
+  chanSub.on('broadcast', { event: 'edit' }, ({ payload }) => patchMessage(payload));
+  chanSub.on('broadcast', { event: 'delete' }, ({ payload }) => { const el = document.getElementById('m'+payload.message_id); if (el) el.remove(); });
+  chanSub.subscribe();
+
+  typSub = sb.channel('typ:' + c.id, { config: { private: true, broadcast: { self: false } } });
+  typSub.on('broadcast', { event: 'typing' }, ({ payload }) => showTyping(payload.name));
+  typSub.subscribe();
+}
+
+function renderMessage(m) {
+  if (m.id && seen.has(m.id)) return; if (m.id) seen.add(m.id);
+  const who = profiles.get(m.author_id)?.display_name || profiles.get(m.author_id)?.username || 'someone';
+  const mentioned = Array.isArray(m.mention_user_ids) && m.mention_user_ids.includes(me);
+  const el = document.createElement('div');
+  el.className = 'msg' + (m.author_id === me ? ' me' : '') + (mentioned ? ' mention' : '');
+  if (m.id) el.id = 'm' + m.id;
+  const time = new Date(m.created_at || Date.now()).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  el.innerHTML = `<span class="who">${esc(who)}</span><span class="t">${time}</span><div class="body">${fmt(m.body_text || '')}</div>`;
+  $('messages').appendChild(el);
+}
+function patchMessage(m){ const el = document.getElementById('m'+m.id); if (el) el.querySelector('.body').innerHTML = fmt(m.body_text||'') + ' <span class="edited">(edited)</span>'; }
+function fmt(t){ return esc(t).replace(/(^|\s)(@[\w]+)/g, '$1<span class="tag">$2</span>'); }
+function scrollDown(){ const m=$('messages'); m.scrollTop = m.scrollHeight; }
+let typingTimer; function showTyping(name){ $('typing').textContent = name + ' is typing...'; clearTimeout(typingTimer); typingTimer = setTimeout(()=>$('typing').textContent='', 2500); }
+
+// ---------- send + typing ----------
+const composer = $('composer');
+composer.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+let lastTyping = 0;
+composer.addEventListener('input', () => {
+  const now = Date.now(); if (now - lastTyping < 1500 || !typSub) return; lastTyping = now;
+  typSub.send({ type:'broadcast', event:'typing', payload:{ name: profiles.get(me)?.display_name || 'someone' } });
+});
+async function send() {
+  const text = composer.value.trim(); if (!text || !current) return;
+  composer.value = '';
+  const mentions = resolveMentions(text);
+  const nonce = crypto.randomUUID();
+  // optimistic
+  const optim = { id: nonce, author_id: me, body_text: text, mention_user_ids: mentions, created_at: new Date().toISOString(), channel_id: current.id };
+  const el = document.createElement('div'); el.className = 'msg me pending'; el.id = 'm' + nonce;
+  el.innerHTML = `<span class="who">${esc(profiles.get(me)?.display_name||'you')}</span><span class="t">now</span><div class="body">${fmt(text)}</div>`;
+  $('messages').appendChild(el); scrollDown();
+  const { data, error } = await sb.rpc('send_message', {
+    p_channel: current.id, p_client_msg_id: nonce, p_body: { text }, p_body_text: text,
+    p_mentions: mentions, p_mention_scope: 'none', p_reply_to: null, p_thread: null,
+  });
+  if (error) { el.querySelector('.body').innerHTML += ` <span class="edited" style="color:#ff8080">(${esc(error.message)})</span>`; return; }
+  // reconcile optimistic -> real id
+  el.classList.remove('pending'); el.id = 'm' + data.id; seen.add(data.id);
+}
+function resolveMentions(text) {
+  const out = []; const byName = new Map();
+  for (const p of profiles.values()) { if (p.username) byName.set(('@'+p.username).toLowerCase(), p.id); if (p.display_name) byName.set(('@'+p.display_name).toLowerCase(), p.id); }
+  (text.match(/@[\w]+/g) || []).forEach(tok => { const id = byName.get(tok.toLowerCase()); if (id && !out.includes(id)) out.push(id); });
+  return out;
+}
+
+// ---------- presence ----------
+const online = new Set([me]);
+function subscribeUser(token){
+  if (userSub) sb.removeChannel(userSub);
+  userSub = sb.channel('user:' + me, { config: { private: true } });
+  userSub.on('broadcast', { event: 'mention' }, () => {}); // could badge
+  userSub.subscribe();
+}
+async function heartbeatLoop(){ const beat = async () => { try { await sb.rpc('heartbeat', { p_status:'online' }); } catch {} }; beat(); setInterval(beat, 45000); }
+async function presenceLoop(){
+  const tick = async () => {
+    const ids = [...profiles.keys()]; if (!ids.length) return;
+    const { data } = await sb.from('user_presence').select('user_id,status,last_seen_at').in('user_id', ids);
+    online.clear();
+    (data||[]).forEach(p => { if (Date.now() - new Date(p.last_seen_at).getTime() < 90000 && p.status !== 'offline') online.add(p.user_id); });
+    online.add(me);
+    $('onlineCount').textContent = online.size;
+    renderChannels();
+  };
+  tick(); setInterval(async () => { await loadMembers(); tick(); }, 20000);
+}
+
+// resume an existing session on reload
+(async () => { const { data:{ session } } = await sb.auth.getSession(); if (session) enter(); })();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && current) openChannel(current); });
+</script>
+</body>
+</html>
