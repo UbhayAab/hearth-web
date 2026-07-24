@@ -272,8 +272,8 @@ async function loadChannels(){
   channels=chs||[]; await renderChannels();
 }
 async function renderChannels(){
-  const {data:unread}=await sb.rpc('get_unread',{p_workspace:ws.id}).then(r=>({data:r.data||[]})).catch(()=>({data:[]}));
-  const um=new Map((unread||[]).map(u=>[u.scope_id,u]));
+  let unread=[]; try{ const r=await sb.rpc('get_unread',{p_workspace:ws.id}); unread=r.data||[]; }catch{}
+  const um=new Map(unread.map(u=>[u.scope_id,u]));
   const text=channels.filter(c=>c.kind!=='voice'), voice=channels.filter(c=>c.kind==='voice');
   const {data:convs}=await sb.from('conversations').select('id,kind').eq('workspace_id',ws.id);
   let h='<h3>Channels</h3>';
