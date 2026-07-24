@@ -220,7 +220,18 @@ async function openChannel(c) {
 }
 
 function renderMessage(m) {
-  if (m.id && seen.has(m.id)) return; if (m.id) seen.add(m.id);
+  const nonce = m.client_msg_id;
+  // My own optimistic message echoing back via the DB broadcast (or RPC return):
+  // upgrade the pending element in place instead of rendering a duplicate.
+  if (nonce && seen.has('n:' + nonce)) {
+    const ex = document.getElementById('m' + nonce);
+    if (ex) { ex.classList.remove('pending'); if (m.id) ex.id = 'm' + m.id; }
+    if (m.id) seen.add(m.id);
+    return;
+  }
+  if (m.id && seen.has(m.id)) return;
+  if (m.id) seen.add(m.id);
+  if (nonce) seen.add('n:' + nonce);
   const who = profiles.get(m.author_id)?.display_name || profiles.get(m.author_id)?.username || 'someone';
   const mentioned = Array.isArray(m.mention_user_ids) && m.mention_user_ids.includes(me);
   const el = document.createElement('div');
@@ -248,8 +259,8 @@ async function send() {
   composer.value = '';
   const mentions = resolveMentions(text);
   const nonce = crypto.randomUUID();
-  // optimistic
-  const optim = { id: nonce, author_id: me, body_text: text, mention_user_ids: mentions, created_at: new Date().toISOString(), channel_id: current.id };
+  seen.add('n:' + nonce);   // claim this nonce so the broadcast echo dedupes against it
+  // optimistic render
   const el = document.createElement('div'); el.className = 'msg me pending'; el.id = 'm' + nonce;
   el.innerHTML = `<span class="who">${esc(profiles.get(me)?.display_name||'you')}</span><span class="t">now</span><div class="body">${fmt(text)}</div>`;
   $('messages').appendChild(el); scrollDown();
@@ -257,9 +268,11 @@ async function send() {
     p_channel: current.id, p_client_msg_id: nonce, p_body: { text }, p_body_text: text,
     p_mentions: mentions, p_mention_scope: 'none', p_reply_to: null, p_thread: null,
   });
-  if (error) { el.querySelector('.body').innerHTML += ` <span class="edited" style="color:#ff8080">(${esc(error.message)})</span>`; return; }
-  // reconcile optimistic -> real id
-  el.classList.remove('pending'); el.id = 'm' + data.id; seen.add(data.id);
+  if (error) { const e2 = document.getElementById('m'+nonce); if (e2) e2.querySelector('.body').innerHTML += ` <span class="edited" style="color:#ff8080">(${esc(error.message)})</span>`; return; }
+  // reconcile: the broadcast handler may already have upgraded the element
+  const e3 = document.getElementById('m' + nonce) || document.getElementById('m' + data.id);
+  if (e3) { e3.classList.remove('pending'); e3.id = 'm' + data.id; }
+  seen.add(data.id);
 }
 function resolveMentions(text) {
   const out = []; const byName = new Map();
