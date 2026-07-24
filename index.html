@@ -23,6 +23,10 @@
   header { display:flex; align-items:center; gap:10px; padding:9px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex:none; }
   header .sp { flex:1; }
   main { flex:1; display:flex; min-height:0; }
+  #spaceRail { width:60px; background:#0b0d12; border-right:1px solid var(--line); display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:8px; overflow:auto; flex:none; }
+  .sicon { width:42px; height:42px; border-radius:13px; background:var(--panel2); color:var(--text); display:flex; align-items:center; justify-content:center; font-weight:700; cursor:pointer; border:2px solid transparent; font-size:16px; }
+  .sicon:hover { border-color:var(--dim); } .sicon.active { border-color:var(--accent); background:var(--me); }
+  .sicon.add { color:var(--accent); font-size:24px; background:transparent; border:1px dashed var(--line); }
   nav { width:210px; background:var(--panel); border-right:1px solid var(--line); overflow:auto; flex:none; padding:8px; }
   nav h3 { font-size:10px; text-transform:uppercase; color:var(--dim); margin:12px 8px 4px; letter-spacing:.6px; display:flex; justify-content:space-between; }
   .chan { padding:5px 9px; border-radius:7px; color:var(--dim); cursor:pointer; display:flex; align-items:center; gap:6px; font-size:14px; }
@@ -116,9 +120,11 @@
   <!-- CHAT -->
   <div id="chat" class="hidden" style="display:flex; flex-direction:column; height:100%">
     <header>
+      <strong id="spaceName" style="margin-right:10px"></strong>
       <strong id="hdr">#general</strong>
       <span class="muted" id="hdrtopic"></span>
       <span class="sp"></span>
+      <button id="btnInvite" title="Invite people" style="padding:5px 11px; margin-right:6px">Invite</button>
       <button class="icon" id="btnActivity" title="Activity">Activity</button>
       <button class="icon" id="btnSearch" title="Search">Search</button>
       <button class="icon" id="btnPins" title="Pinned">Pins</button>
@@ -134,6 +140,7 @@
       <button id="vleave" style="padding:5px 9px; background:#b3402f">Leave</button>
     </div>
     <main>
+      <div id="spaceRail"></div>
       <nav>
         <div id="channels"></div>
       </nav>
@@ -181,7 +188,7 @@ function fmt(text){ text=text||''; const men=[];
   return html; }
 const timeOf=d=>new Date(d||Date.now()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 
-let me=null, ws=null, channels=[], current=null, currentDM=null;
+let me=null, ws=null, spaces=[], channels=[], current=null, currentDM=null;
 const profiles=new Map(); const seen=new Set(); const renderedIds=new Set(); const rootThreads=new Map(); // rootMsgId -> {threadId, count}
 const msgCache=new Map(); let replyTarget=null;
 let pendingAttachments=[]; const mediaUrlCache=new Map();
@@ -212,21 +219,48 @@ $('otpVerifyBtn').onclick=async()=>{ const email=$('email').value.trim(),token=$
   const {error}=await sb.auth.verifyOtp({email,token,type:'email'}); if(error) return err(error.message);
   const n=$('name').value.trim(); if(n) await sb.rpc('set_profile',{p_display_name:n,p_avatar_key:null,p_pronouns:null,p_status_text:null,p_status_emoji:null,p_timezone:'Asia/Kolkata'}); enter(); };
 $('signout').onclick=async()=>{ if(voice.active) leaveVoice(); await sb.auth.signOut(); location.reload(); };
+$('btnInvite').onclick=()=>copyInviteLink(false);
 function err(m){ $('authErr').textContent=m; busy(false); busy(false,'otp'); }
 function busy(b,w){ const el=w==='otp'?$('otpSend'):$('guestBtn'); el.disabled=b; el.textContent=b?'...':(w==='otp'?'Email me a code':'Continue as guest'); }
 
 // ---------------- enter ----------------
+function parseInviteToken(){ const m=(location.hash||'').match(/join\/([^\/?#]+)/); return m?decodeURIComponent(m[1]):null; }
 async function enter(){
   const {data:{session}}=await sb.auth.getSession(); if(!session) return err('No session');
   me=session.user.id; sb.realtime.setAuth(session.access_token);
-  const {error:je}=await sb.rpc('redeem_invite',{p_token:DEMO_TOKEN}); void je;
-  const {data:wsRows}=await sb.from('workspaces').select('*').limit(1); ws=wsRows&&wsRows[0]; if(!ws) return err('No demo space');
-  await loadMembers();
+  // 1. join via org link if the URL has one
+  let joinedId=null; const tok=parseInviteToken()||sessionStorage.getItem('pendingInvite');
+  if(tok){ sessionStorage.removeItem('pendingInvite'); const {data}=await sb.rpc('redeem_invite',{p_token:tok}); if(data) joinedId=data.id; history.replaceState(null,'',location.pathname+location.search); }
+  // 2. ensure demo-space membership so the shared demo is never empty
+  await sb.rpc('redeem_invite',{p_token:DEMO_TOKEN}).catch(()=>{});
   $('auth').classList.add('hidden'); $('chat').classList.remove('hidden');
-  $('meName').textContent=profiles.get(me)?.display_name||'you';
-  await loadChannels();
+  const {data:myp}=await sb.from('profiles').select('display_name').eq('id',me).maybeSingle(); $('meName').textContent=myp?.display_name||'you';
   subUser(session.access_token); heartbeat(); presenceLoop();
-  const gen=channels.find(c=>c.name==='general'&&c.kind!=='voice')||channels.find(c=>c.kind!=='voice'); if(gen) openChannel(gen);
+  await loadSpaces();
+  const active=spaces.find(s=>s.id===joinedId)||spaces.find(s=>s.slug==='demo')||spaces[0];
+  if(active) await switchWorkspace(active); else { renderSpaceRail(); $('messages').innerHTML='<div class="muted" style="padding:20px">Create a Space to get started (+ on the left), or open an invite link.</div>'; }
+}
+async function loadSpaces(){ const {data}=await sb.from('workspaces').select('*').order('created_at'); spaces=data||[]; renderSpaceRail(); }
+async function switchWorkspace(target){ if(!target) return; ws=target; current=null; currentDM=null; closePanel(); if(voice.active&&voice.channel&&voice.channel.workspace_id!==target.id){/*keep voice*/}
+  $('spaceName').textContent=ws.name||''; renderSpaceRail();
+  await loadMembers(); await loadChannels();
+  const gen=channels.find(c=>c.name==='general'&&c.kind!=='voice')||channels.find(c=>c.kind!=='voice');
+  if(gen) openChannel(gen); else { $('messages').innerHTML='<div class="muted" style="padding:20px">No channels yet.</div>'; }
+}
+function renderSpaceRail(){ const r=$('spaceRail'); if(!r) return;
+  r.innerHTML=spaces.map(s=>`<div class="sicon ${ws&&s.id===ws.id?'active':''}" data-ws="${s.id}" title="${esc(s.name||'')}">${esc(((s.name||'?').trim()[0]||'?').toUpperCase())}</div>`).join('')+`<div class="sicon add" data-add="1" title="Create a Space">+</div>`;
+  r.querySelectorAll('[data-ws]').forEach(el=>el.onclick=()=>{ const s=spaces.find(x=>x.id===el.dataset.ws); if(s&&(!ws||s.id!==ws.id)) switchWorkspace(s); });
+  r.querySelector('[data-add]').onclick=createSpace;
+}
+async function createSpace(){ const name=prompt('Name your Space (organization):'); if(!name||!name.trim()) return;
+  const {data,error}=await sb.rpc('create_space',{p_name:name.trim()}); if(error){ alert(error.message); return; }
+  await loadSpaces(); await switchWorkspace(spaces.find(s=>s.id===data.id)||data); copyInviteLink(true);
+}
+async function copyInviteLink(isNew){ if(!ws) return; const {data:token,error}=await sb.rpc('create_invite',{p_workspace:ws.id,p_max_uses:null,p_expires_at:null});
+  if(error){ alert(error.message); return; }
+  const link=location.origin+location.pathname+'#/join/'+token;
+  try{ await navigator.clipboard.writeText(link); }catch{}
+  prompt((isNew?'Space created. ':'')+'Share this link to invite people to "'+ws.name+'" (copied to clipboard):', link);
 }
 async function loadMembers(){
   const {data:mem}=await sb.from('workspace_members').select('user_id').eq('workspace_id',ws.id);
@@ -595,8 +629,9 @@ function monitorSpeaking(id,stream){ try{ const ac=new (window.AudioContext||win
   const loop=()=>{ an.getByteFrequencyData(buf); const v=buf.reduce((a,b)=>a+b,0)/buf.length; const el=$('vp-'+id); if(el) el.classList.toggle('speaking',v>18); const raf=requestAnimationFrame(loop); speakMon.set(id,{raf}); };
   loop(); }catch{} }
 
-// resume session
-(async()=>{ const {data:{session}}=await sb.auth.getSession(); if(session) enter(); })();
+// resume session; stash any invite token so it survives the auth step
+(async()=>{ const t=parseInviteToken(); if(t) sessionStorage.setItem('pendingInvite',t);
+  const {data:{session}}=await sb.auth.getSession(); if(session) enter(); })();
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ if(currentDM) openDM(currentDM); else if(current) openChannel(current); } });
 </script>
 </body>
