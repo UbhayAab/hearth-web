@@ -35,7 +35,14 @@
   .msg:hover { background:var(--panel); }
   .msg .who { font-weight:700; margin-right:8px; } .msg .t { color:var(--dim); font-size:11px; }
   .msg.me { background:var(--me); } .msg.mention { background:var(--mention); }
-  .msg .body { white-space:pre-wrap; word-break:break-word; } .msg .body .tag { color:var(--accent); font-weight:600; }
+  .msg .body { word-break:break-word; } .msg .body .tag { color:var(--accent); font-weight:600; }
+  .body p { margin:0 0 4px; } .body p:last-child { margin-bottom:0; }
+  .body a { color:#7aa5ff; } .body ul,.body ol { margin:4px 0; padding-left:22px; } .body blockquote { border-left:3px solid var(--line); margin:4px 0; padding:0 10px; color:var(--dim); }
+  .body code { background:#0d1017; border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-family:ui-monospace,Consolas,monospace; font-size:12.5px; }
+  .body pre { background:#0d1017; border:1px solid var(--line); border-radius:8px; padding:10px 12px; overflow-x:auto; margin:6px 0; }
+  .body pre code { background:none; border:none; padding:0; display:block; line-height:1.5; }
+  .body table { border-collapse:collapse; margin:4px 0; } .body th,.body td { border:1px solid var(--line); padding:3px 8px; }
+  .hljs-keyword,.hljs-selector-tag,.hljs-built_in{color:#c792ea} .hljs-string,.hljs-attr{color:#c3e88d} .hljs-number,.hljs-literal{color:#f78c6c} .hljs-comment{color:#546e7a;font-style:italic} .hljs-function .hljs-title,.hljs-title{color:#82aaff} .hljs-attribute,.hljs-name,.hljs-tag{color:#f07178} .hljs-type,.hljs-class .hljs-title{color:#ffcb6b}
   .msg .actions { position:absolute; top:-10px; right:8px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; display:none; }
   .msg:hover .actions { display:flex; }
   .rxns { display:flex; gap:4px; flex-wrap:wrap; margin:2px 0 0; }
@@ -129,6 +136,12 @@
 
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
+import MarkdownIt from 'https://esm.sh/markdown-it@14.1.0';
+import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
+import hljs from 'https://esm.sh/highlight.js@11.10.0';
+const md=new MarkdownIt({ html:false, linkify:true, breaks:true, highlight:(str,lang)=>{ try{ if(lang&&hljs.getLanguage(lang)) return hljs.highlight(str,{language:lang}).value; }catch{} return md.utils.escapeHtml(str); } });
+DOMPurify.addHook('afterSanitizeAttributes',n=>{ if(n.tagName==='A'){ n.setAttribute('target','_blank'); n.setAttribute('rel','noopener noreferrer'); } });
+const SANITIZE={ ALLOWED_TAGS:['p','br','strong','em','del','s','code','pre','a','ul','ol','li','blockquote','span','h1','h2','h3','hr','table','thead','tbody','tr','th','td'], ALLOWED_ATTR:['href','class','target','rel'] };
 const SUPABASE_URL='https://ybddogqphinruyunnuwx.supabase.co';
 const PUBLISHABLE='sb_publishable_5gyvKj8AtZeXGDWVLYg3VA_Uwh4T4RD';
 const DEMO_TOKEN='hearth-demo-open-2026';
@@ -136,7 +149,12 @@ const EMOJIS=['👍','❤️','😂','🎉','🔥','👀','✅','🙏','😮','�
 const sb=createClient(SUPABASE_URL,PUBLISHABLE,{auth:{autoRefreshToken:true,persistSession:true},realtime:{params:{eventsPerSecond:30}}});
 const $=id=>document.getElementById(id);
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const fmt=t=>esc(t).replace(/(^|\s)(@[\w]+)/g,'$1<span class="tag">$2</span>');
+// markdown + code highlight + sanitize, with @mentions preserved through the pipeline
+function fmt(text){ text=text||''; const men=[];
+  const toks=text.replace(/(^|\s)(@[\w][\w-]*)/g,(m,pre,tag)=>{ men.push(tag); return pre+'⁣M'+(men.length-1)+'⁣'; });
+  let html=md.render(toks); html=DOMPurify.sanitize(html,SANITIZE);
+  html=html.replace(/⁣M(\d+)⁣/g,(m,i)=>`<span class="tag">${esc(men[+i])}</span>`);
+  return html; }
 const timeOf=d=>new Date(d||Date.now()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 
 let me=null, ws=null, channels=[], current=null, currentDM=null;
