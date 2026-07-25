@@ -274,7 +274,7 @@ function subscribeChannel(c) {
       refreshThreadIndicator(p.root_message_id);
     },
     voice_join: () => bus.emit('voice:refresh'),
-    voice_leave: () => bus.emit('voice:refresh'),
+    voice_leave: (p) => { bus.emit('voice:left', { userId: p?.user_id }); bus.emit('voice:refresh'); },
   });
 
   subscribe('typing', 'typ:' + c.id, {

@@ -17,7 +17,7 @@ const RTC = {
 
 export const voice = {
   active: false, channel: null, local: null, muted: false, deafened: false,
-  peers: new Map(), monitors: new Map(), ptt: false, pttHeld: false,
+  peers: new Map(), monitors: new Map(), ptt: false, pttHeld: false, beat: null,
 };
 
 export async function joinVoice(channelId) {
@@ -45,6 +45,13 @@ export async function joinVoice(channelId) {
   try { await api.joinVoice(c.id); } catch (e) { toast(e.message, 'error'); }
 
   subscribe('voice', 'vc:' + c.id, { signal: (p) => onSignal(p) }, { self: false });
+
+  // Liveness. Without this the server cannot tell a closed laptop from a quiet
+  // listener, and the room fills with people who are not there.
+  clearInterval(voice.beat);
+  voice.beat = setInterval(() => {
+    if (voice.active && voice.channel) api.voiceHeartbeat(voice.channel.id).catch(() => {});
+  }, 30000);
 
   const parts = await table('voice_participants', (q) => q.eq('channel_id', c.id));
   // Deterministic offerer (lower id offers) so two peers never both offer.
@@ -120,6 +127,8 @@ export async function leaveVoice() {
   if (!voice.active) return;
   const ch = voice.channel;
   for (const id of [...voice.peers.keys()]) { signal(id, { kind: 'bye' }); dropPeer(id); }
+  clearInterval(voice.beat);
+  voice.beat = null;
   unsubscribe('voice');
   voice.local?.getTracks().forEach((t) => t.stop());
   voice.local = null;
@@ -220,4 +229,7 @@ export function initVoice() {
   window.addEventListener('pagehide', () => { if (voice.active) navigator.sendBeacon && leaveVoice(); });
   bus.on('voice:join', ({ channelId }) => joinVoice(channelId));
   bus.on('voice:refresh', refreshVoice);
+  // The reaper evicts anyone who stopped heartbeating; tear down that peer
+  // rather than holding a connection to a browser that is gone.
+  bus.on('voice:left', ({ userId }) => { if (userId && userId !== store.me) dropPeer(userId); });
 }

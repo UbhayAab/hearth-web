@@ -309,6 +309,7 @@ export const api = {
   // ---------- voice ----------
   joinVoice: (ch) => rpc('join_voice', { p_channel: ch }),
   leaveVoice: (ch) => rpc('leave_voice', { p_channel: ch }),
+  voiceHeartbeat: (ch) => rpc('voice_heartbeat', { p_channel: ch }),
   canJoinVoice: (ch) => rpc('can_join_voice', { p_channel: ch }),
 
   // ---------- attachments ----------
