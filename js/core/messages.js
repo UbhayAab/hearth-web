@@ -260,6 +260,18 @@ export function upgradeMessageRow(row, m, context = 'channel') {
   return row;
 }
 
+// Is this message already on screen INSIDE this particular container?
+//
+// claimMessage() is a single global gate: one message, one render. That holds
+// everywhere except a thread reply sent with "Also send to channel", which
+// legitimately belongs in TWO places at once - the thread panel and the channel.
+// With one shared gate whichever path ran first consumed the claim and the other
+// silently rendered nothing. Containers arbitrate for themselves.
+export function renderedIn(host, messageId) {
+  if (!host || !messageId) return false;
+  return !!host.querySelector(`[data-id="${CSS.escape(messageId)}"]`);
+}
+
 // Dedupe gate: returns false when this message was already rendered (by id or by
 // the optimistic-send nonce).
 export function claimMessage(m) {

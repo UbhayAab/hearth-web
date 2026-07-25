@@ -11,7 +11,7 @@ import { $, el, esc, plain, relTime } from '../util.js';
 import { subscribe, unsubscribe } from '../sb.js';
 import { registerPanel, openPanel, closePanel, toast, confirmModal, formModal, currentPanel } from '../ui.js';
 import { buildMessage, appendMessage, loadReactions, claimMessage, applyEdit, applyDelete,
-  applyReaction, refreshThreadIndicator, avatarHtml } from './messages.js';
+  applyReaction, refreshThreadIndicator, avatarHtml, renderedIn } from './messages.js';
 
 export const threadState = { id: null, root: null, following: false, maxSeq: 0 };
 
@@ -41,9 +41,13 @@ function subscribeThread(threadId) {
   subscribe('thread', 'th:' + threadId, {
     msg: (m) => {
       if (threadState.id !== threadId) return;
-      if (!claimMessage(m)) return;
       const host = $('threadMsgs');
-      if (host) { appendMessage(host, m, 'thread'); host.scrollTop = host.scrollHeight; }
+      // Same reason as the channel side: an also-send reply is claimed by
+      // whichever container saw it first, so the panel asks itself.
+      if (!host || renderedIn(host, m.id)) return;
+      store.seen.add(m.id);
+      appendMessage(host, m, 'thread');
+      host.scrollTop = host.scrollHeight;
       threadState.maxSeq = Math.max(threadState.maxSeq, m.seq || 0);
     },
     edit: (p) => applyEdit(p.id, p.body_text),
@@ -175,18 +179,33 @@ registerPanel({
           thread: threadId,
           alsoSend: also,
         });
-        // Render my own reply immediately. Drop the nonce guard first so claimMessage
-        // decides on the real id: if the broadcast already rendered it, the id is
-        // in `seen` and this is a no-op; otherwise we render it now and the echo
-        // is the one that gets skipped. Exactly one render either way.
+        // Render my own reply immediately. Each container decides for itself
+        // whether it already holds this message - the shared claim gate cannot,
+        // because an also-send reply belongs in the thread AND the channel and
+        // whichever path ran first would swallow the other.
+        store.seen.delete('n:' + nonce);
+        if (data) store.seen.add(data.id);
         const host = $('threadMsgs');
-        if (host && data) {
-          store.seen.delete('n:' + nonce);
-          if (claimMessage(data)) { appendMessage(host, data, 'thread'); host.scrollTop = host.scrollHeight; }
+        if (host && data && !renderedIn(host, data.id)) {
+          appendMessage(host, data, 'thread');
+          host.scrollTop = host.scrollHeight;
         }
         const t = store.rootThreads.get(threadState.root?.id);
         if (t) { t.count = (t.count || 0) + 1; refreshThreadIndicator(threadState.root.id); }
-        if (also) bus.emit('thread:alsoSent', { message: data });
+
+        // "Also send to channel" has to put the message in the channel for the
+        // SENDER too. claimMessage() above already registered this id on behalf
+        // of the thread panel, so the realtime echo that normally paints the
+        // channel copy is deduped away and the author is the one person who
+        // never sees their own broadcast. Everyone else saw it, which is why
+        // this looked like it worked from the outside.
+        if (also && data && store.current && data.channel_id === store.current.id) {
+          const list = $('messages');
+          if (list && !renderedIn(list, data.id)) {
+            appendMessage(list, data, 'channel');
+            list.scrollTop = list.scrollHeight;
+          }
+        }
       } catch (e) {
         toast(e.message || 'Reply failed', 'error');
         ta.value = text;

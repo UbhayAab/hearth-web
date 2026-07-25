@@ -22,6 +22,16 @@ const FEATURES = [
   'bookmarks',
   'notifications',
   'shortcuts',
+  // coordination (0055): what a volunteer coordinator does every week
+  'ackloop',
+  'forms',
+  'tasks',
+  'orientation',
+  'activityReport',
+  'offline',
+  // Last on purpose: it re-registers a few core panels by id and decorates what
+  // every other feature has already put on screen.
+  'uxfix',
 ];
 
 export async function registerFeatures(app) {

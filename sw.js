@@ -36,6 +36,10 @@ const SHELL_FILES = [
   './js/ui.js',
   './js/pwa.js',
   './js/features/index.js',
+  // The outbox has to be reachable with no network - it is the module that
+  // replays what the person wrote while they had none.
+  './js/features/offline.js',
+  './js/lib/outbox.js',
   './js/core/auth.js',
   './js/core/workspace.js',
   './js/core/channels.js',

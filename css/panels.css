@@ -509,7 +509,7 @@ body .admin-tabs {
   padding: 0;
   border-bottom: 1px solid var(--c-border);
   background: var(--panel-bg, var(--c-surface));
-  box-shadow: 0 calc(-1 * var(--s-6)) 0 var(--s-6) var(--panel-bg, var(--c-surface));
+  box-shadow: 0 calc(-1 * var(--s-9)) 0 var(--s-9) var(--panel-bg, var(--c-surface));
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -1130,7 +1130,41 @@ body .onb-rr b {
   /* One column: two 44px checkbox rows side by side at 360px is unreadable. */
   body .roles-grid { grid-template-columns: 1fr; }
 
-  body .roles-name { max-width: 60%; }
+  /* The permission summary is the only part of a role row worth reading, and
+     with a name and two buttons beside it there is nothing left of it - at
+     390px it truncated to "Send...". Give it its own line under the name at
+     full width, indented past the swatch so the row still reads as one thing,
+     and clamp it at two lines so a role with every permission cannot turn the
+     list into a wall. */
+  body .roles-row {
+    flex-wrap: wrap;
+    row-gap: var(--s-1);
+  }
+  body .roles-name {
+    flex: 1;
+    /* min-width:0 or the automatic minimum of a nowrap span is its whole
+       unwrapped name, and one long role pushes the buttons off the screen. */
+    min-width: 0;
+    max-width: none;
+  }
+  body .roles-acts { order: 2; }
+  body .roles-meta {
+    flex: 1 0 100%;
+    order: 3;
+    white-space: normal;
+  }
+  /* Only the role rows have a swatch; indent under the name to sit beneath it
+     rather than beside a gap the member and group rows do not have. */
+  body .roles-row:has(.roles-swatch) .roles-meta { padding-left: var(--s-6); }
+  /* The clamp is for prose. roles.js reuses .roles-meta as the container for a
+     member's role chips, and -webkit-box would stack those into a column. */
+  body .roles-meta:not(.roles-chiprow) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  body .roles-chiprow { flex-wrap: wrap; }
 
   /* auto-fit lands on two columns at 390px and leaves a third card stranded at
      half width beside a hole, with its caption wrapping while its neighbours'

@@ -8,7 +8,7 @@ import { PERM, MESSAGE_PAGE } from '../config.js';
 import { $, el, esc, debounce } from '../util.js';
 import { toast, contextMenu, formModal, confirmModal, renderNavSections, closePanel } from '../ui.js';
 import { appendMessage, claimMessage, loadReactions, applyEdit, applyDelete, applyReaction,
-  refreshThreadIndicator, jumpTo, buildMessage, scrollDown } from './messages.js';
+  refreshThreadIndicator, jumpTo, buildMessage, scrollDown, renderedIn } from './messages.js';
 
 export { scrollDown };
 
@@ -300,6 +300,17 @@ function onIncoming(m) {
       bus.emit('message:new', { msg: m, inThread: true });
       return;
     }
+    // Deliberately broadcast into the channel. The thread panel may already have
+    // claimed this id, so ask the channel list itself rather than the shared gate.
+    const list = $('messages');
+    if (renderedIn(list, m.id)) return;
+    store.seen.add(m.id);
+    const stickA = nearBottom();
+    appendMessage(list, m, 'channel');
+    if (stickA) scrollDown(); else showNewBelow();
+    api.markRead('channel', store.current.id, m.seq).catch(() => {});
+    bus.emit('message:new', { msg: m });
+    return;
   }
 
   if (!claimMessage(m)) return;

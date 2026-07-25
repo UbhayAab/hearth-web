@@ -358,3 +358,27 @@ body { font-feature-settings: "cv05" 1, "cv08" 1, "ss03" 1, "calt" 1; }
    eleven of them is a menu. */
 .actions { gap: 1px; padding: var(--s-1); box-shadow: var(--e-2); }
 .actions .quick:nth-child(n + 5) { display: none; }
+
+/* ---------------------------------------------------------------- channel guide
+   The first-visit orientation card. A banner above the conversation, never a
+   dialog: a modal on channel entry steals focus, blocks the composer, and fires
+   once per channel, so joining a Space with six channels means six interruptions
+   and nobody reads the sixth. */
+.chguide-banner {
+  flex: none;
+  margin: var(--s-4) var(--s-6) 0;
+  padding: var(--s-5);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-accent);
+  border-radius: var(--r-md);
+  max-width: var(--reading-max);
+}
+.chguide-bannerhead {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-bottom: var(--s-3);
+}
+.chguide-bannerhead strong { flex: 1 1 auto; font-size: var(--t-base); }
+@media (max-width: 860px) { .chguide-banner { margin-inline: var(--s-4); } }

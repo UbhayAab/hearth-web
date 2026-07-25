@@ -1315,12 +1315,18 @@
     padding-inline: var(--s-3);
   }
   .crow .send { margin-left: auto; }
-  /* Feature modules can register more composer tools than the row can hold;
-     let them scroll rather than push the send button off the edge. */
+  /* Feature modules can register any number of composer tools, and the fixed
+     controls alone (attach, emoji, send at 44px each plus gaps) already need
+     284px of a 360px screen's 266px row. With an auto basis the row wrapped and
+     the send button dropped onto a third line, making the composer 180px tall.
+     A zero basis lets the optional tools absorb every shortfall by scrolling
+     inside themselves, so the essential three never move and the row never
+     wraps at any width. */
   .ctools {
-    flex: 0 1 auto;
+    flex: 1 1 0;
     min-width: 0;
     overflow-x: auto;
+    scrollbar-width: none;
   }
 }
 
@@ -1359,12 +1365,19 @@
      Both selectors are anchored rather than chained, so neither walks off the
      end when a feature module registers another action: buildMessage always
      emits the QUICK_EMOJI run first with the picker immediately after it, and
-     `more` is registered at order 900 and is therefore always last. */
-  .actions {
+     `more` is registered at order 900 and is therefore always last.
+
+     Everything in this block names .msg rather than styling .actions bare. That
+     is not specificity for its own sake: later stylesheets re-state
+     `.actions { padding; box-shadow }` and `button:has(.ico){display:inline-flex}`
+     unconditionally, which tie with the bare selectors and win on order, putting
+     the card and all six buttons back. The bar only ever exists inside a row, so
+     naming the row is accurate and settles it without !important. */
+  .msg > .actions {
     opacity: 1;
     visibility: visible;
     transform: none;
-    top: var(--s-1);
+    top: 0;
     right: var(--s-3);
     gap: 0;
     padding: 0;
@@ -1375,11 +1388,6 @@
     background: transparent;
     box-shadow: none;
   }
-  /* Scoped through .msg on purpose, not for effect: a later stylesheet gives
-     every icon button `button:has(.ico){display:inline-flex}`, which ties with a
-     bare `.actions > button` and wins on order. The bar only ever exists inside
-     a row, so naming the row is both accurate and enough to settle it without
-     reaching for !important. */
   .msg .actions > button { display: none; }
   .msg .actions .quick + button:not(.quick),
   .msg .actions > button:last-child {
@@ -1407,15 +1415,18 @@
   .msg .actions .quick + button:not(.quick)::after { left: -4px; }
   .msg .actions > button:last-child::after { right: -4px; }
 
-  /* Reserve the corner the bar occupies. 84x32 is the bar's own box: on a row
-     with a header the name and time are far shorter than the column, so nothing
-     moves at all; on a grouped row the first line or two shorten by 84px and the
-     rest of the message runs the full width. */
-  .mbody::before {
+  /* Reserve the corner the bar occupies. The bar's own box is 80x32, but the
+     reserve is deliberately larger than that on both axes: a later stylesheet
+     re-adds padding to .actions, and a notch sized exactly to today's bar would
+     start overlapping text the moment it grows by 2px. On a row with a header
+     the name and time are far shorter than the column, so nothing moves at all;
+     on a grouped row the first line or two shorten and the rest of the message
+     runs the full width. */
+  .msg .mbody::before {
     content: "";
     float: right;
-    width: 84px;
-    height: var(--s-9);
+    width: 88px;
+    height: var(--s-10);
   }
   /* The formatting-context boxes described above. Clearing puts them below the
      notch at full width instead of letting them shrink beside it. */
@@ -1435,9 +1446,11 @@
   }
   .rxn-add { opacity: 1; }
 
-  /* The thread door is a primary action - full tap size and a visible edge. */
+  /* The thread door is a primary action, and on touch it is now the ONLY way to
+     open a thread without going through the long-press menu - so it gets the
+     full 44px tap minimum and a visible edge, not the 40px it had. */
   .threadind {
-    min-height: 40px;
+    min-height: 44px;
     margin-top: var(--s-4);
     padding-right: var(--s-5);
     padding-left: var(--s-4);
@@ -1448,10 +1461,11 @@
   .quote { padding-block: var(--s-2); }
 
   .crow button { min-width: 44px; height: 44px; }
-  /* 32 + 6 above + 6 below is a 44px target on one line of text. The previous
-     36 + 8 + 8 gave the composer a 108px footprint - an eighth of an iPhone
-     screen - for a single empty line. */
-  .crow textarea { min-height: var(--s-9); padding-block: var(--s-3); }
+  /* box-sizing is border-box, so min-height IS the tap target - 48px clears the
+     44px floor with the padding inside it. The previous 36px min-height plus
+     8px of padding either side measured 52px and gave the composer a 108px
+     footprint, an eighth of an iPhone screen, for one empty line. */
+  .crow textarea { min-height: var(--s-11); padding-block: var(--s-3); }
   .alsosend { min-height: 44px; }
   .alsosend input { width: 20px; height: 20px; }
   .ac-row { min-height: 44px; }
