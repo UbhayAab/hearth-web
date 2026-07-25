@@ -9,6 +9,7 @@ import { table, tryRpc } from '../api.js';
 import { store, bus, nameOf, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { el, esc, plain, relTime, toLocalInput, fromLocalInput, debounce } from '../util.js';
+import { icon } from '../icons.js';
 
 // Set in register(); everything below is module scope so the helpers stay flat.
 let ui = null;
@@ -216,13 +217,13 @@ function registerScheduled() {
   // Hidden until there is something to see: an always-on clock in the header
   // that opens an empty list is just clutter.
   ui.addHeaderButton({
-    id: 'scheduled', label: '🕐', title: 'Scheduled messages', order: 35,
+    id: 'scheduled', label: icon('clock'), title: 'Scheduled messages', order: 35,
     onClick: () => ui.openPanel('scheduled'),
     show: () => scheduledCount > 0,
   });
 
   ui.addComposerButton({
-    id: 'mx-send-later', label: '🕐', title: 'Send later',
+    id: 'mx-send-later', label: icon('clock'), title: 'Send later',
     onClick: sendLaterDialog, show: () => !!store.current,
   });
   // The tool row is painted once during initComposer(), which runs before
@@ -372,24 +373,24 @@ function isPinned(id) {
 
 function registerHoverActions() {
   ui.addMessageAction({
-    id: 'mx-copy', label: '📋', title: 'Copy text', order: 200,
+    id: 'mx-copy', label: icon('doc'), title: 'Copy text', order: 200,
     show: (m) => !!m.body_text,
     onClick: (m) => copyText(m),
   });
   ui.addMessageAction({
-    id: 'mx-unread', label: '📭', title: 'Mark unread from here', order: 210,
+    id: 'mx-unread', label: icon('bell'), title: 'Mark unread from here', order: 210,
     contexts: ['channel'], show: (m) => !!m.seq,
     onClick: (m) => markUnreadFrom(m),
   });
   // Two registrations rather than one toggle: `show(msg)` is per message, so this
   // is the only way the hover bar can say what clicking will actually do.
   ui.addMessageAction({
-    id: 'mx-pin', label: '📌', title: PIN_TITLE, order: 220,
+    id: 'mx-pin', label: icon('pin'), title: PIN_TITLE, order: 220,
     contexts: ['channel'], show: (m) => canPin(m) && !isPinned(m.id),
     onClick: (m) => togglePin(m),
   });
   ui.addMessageAction({
-    id: 'mx-unpin', label: '📍', title: UNPIN_TITLE, order: 220,
+    id: 'mx-unpin', label: icon('pin'), title: UNPIN_TITLE, order: 220,
     contexts: ['channel'], show: (m) => canPin(m) && isPinned(m.id),
     onClick: (m) => togglePin(m),
   });

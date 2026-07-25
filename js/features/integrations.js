@@ -15,6 +15,7 @@ import { PERM, SUPABASE_URL, PUBLISHABLE } from '../config.js';
 import { hasPerm } from '../store.js';
 import { el, esc, plain, relTime } from '../util.js';
 import { uploadFile, mediaUrl } from '../core/media.js';
+import { icon } from '../icons.js';
 
 // The ingress the edge function at supabase/functions/webhook/index.ts serves.
 // It takes POST {token, text, username} and needs no user JWT - the token IS the
@@ -559,7 +560,7 @@ export function register({ ui, api, store, bus, sb }) {
 
   ui.addHeaderButton({
     id: 'integrations',
-    label: '🔌',
+    label: icon('plug'),
     title: 'Integrations - webhooks, bots, commands, emoji',
     order: 195,
     // MANAGE_CHANNELS is enough for webhooks alone, so admins of channels get in
@@ -574,7 +575,7 @@ export function register({ ui, api, store, bus, sb }) {
       if (!hasPerm(PERM.MANAGE_WORKSPACE) && !hasPerm(PERM.MANAGE_CHANNELS)) return [];
       const hay = 'integrations webhooks bots slash commands emoji';
       if (q && !hay.includes(q.toLowerCase())) return [];
-      return [{ label: 'Integrations', hint: 'Webhooks, bots, commands, emoji', icon: '🔌',
+      return [{ label: 'Integrations', hint: 'Webhooks, bots, commands, emoji', icon: icon('plug'),
         run: () => ui.openPanel('integrations') }];
     },
   });

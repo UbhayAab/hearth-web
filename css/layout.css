@@ -63,11 +63,15 @@
    .field itself belongs to components.css; this only neutralises its spacing
    inside my container. */
 .authcard .field { margin-bottom: 0; }
+/* The same gap the card uses, so the rhythm does not change halfway down the
+   form - a 12px gap above "Email" and an 8px gap above "Password" is exactly
+   the kind of drift that reads as sloppy even when nobody can name it. */
 #emailStep,
-#otpStep {
+#otpStep,
+#setPwStep {
   display: flex;
   flex-direction: column;
-  gap: var(--s-4);
+  gap: var(--s-5);
 }
 #otpStep .muted { line-height: var(--t-loose); }
 
@@ -198,17 +202,6 @@ section.msgs {
   flex: 0 0 auto;
 }
 
-/* The one scroll region of the app frame. Everything painted inside it is
-   messages.css; this is only the box that scrolls. min-height:0 is what stops a
-   long conversation from pushing the composer off the bottom of a flex column. */
-#messages {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-}
-
 /* ============================================================================
    TOP BAR - chrome, so --c-nav-*
    ========================================================================= */
@@ -232,7 +225,11 @@ section.msgs {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 12px of air on both sides of the divider. #topbar's own gap only supplies 6
+     on the right-hand side, so the margin makes up the difference and the rule
+     sits optically centred between the Space name and the channel name. */
   padding-right: var(--s-5);
+  margin-right: var(--s-3);
   border-right: 1px solid var(--c-nav-border);
   color: var(--c-nav-brand);
   font-size: var(--t-md);
@@ -247,12 +244,17 @@ section.msgs {
   min-width: 0;
   flex: 0 1 auto;
 }
+/* The channel name shrinks and truncates rather than overflowing: on a phone a
+   nowrap strong with no min-width paints straight over the buttons next to it. */
 .hdr-title strong {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--c-nav-text-active);
   font-size: var(--t-md);
   font-weight: var(--t-bold);
-  white-space: nowrap;
 }
 #hdrTopic {
   min-width: 0;
@@ -269,7 +271,8 @@ section.msgs {
 .hdr-actions {
   display: flex;
   align-items: center;
-  gap: var(--s-1);
+  /* 2px let the hover squares of adjacent icons touch and read as one slab. */
+  gap: var(--s-2);
   flex: 0 1 auto;
   min-width: 0;
   /* Features keep adding icons; let the row scroll rather than push the layout
@@ -315,15 +318,36 @@ section.msgs {
   border-color: color-mix(in srgb, var(--c-nav-text) 30%, transparent);
 }
 
-/* --c-text-inverse, not --c-accent-text: the dark theme's accent is a bright
-   blue that white 13px type cannot clear AA against. */
+/* components.css paints .install as a tinted SUCCESS chip in content colours -
+   correct there, unreadable here, because --c-text on the aubergine header is
+   near-black on near-black. So the header keeps the shape and re-derives the
+   colours from the chrome family.
+   It is deliberately NOT an accent fill: a solid blue chip is the loudest thing
+   in the bar and "install the app" is never the most important thing on screen.
+   The fill is the nav's own ink at low strength, which lands one step above the
+   header on every theme without inventing a colour. */
 #installBtn.install {
   flex: none;
-  background: var(--c-accent);
-  color: var(--c-text-inverse);
+  background: color-mix(in srgb, var(--c-nav-text) 16%, transparent);
+  border-color: color-mix(in srgb, var(--c-nav-text) 26%, transparent);
+  color: var(--c-nav-text-active);
   font-weight: var(--t-semibold);
+  box-shadow: none;
 }
-#installBtn.install:hover { background: var(--c-accent-hover); }
+#installBtn.install:hover {
+  background: color-mix(in srgb, var(--c-nav-text) 28%, transparent);
+  border-color: color-mix(in srgb, var(--c-nav-text) 48%, transparent);
+}
+#installBtn.install:active { background: color-mix(in srgb, var(--c-nav-text) 34%, transparent); }
+
+/* base.css rings in --c-accent, which measures 2.5:1 against the colorful
+   theme's aubergine - a focus ring nobody can see is not a focus ring. Chrome
+   rings in the nav's brightest ink instead, which contrasts hard on all three. */
+#topbar :focus-visible,
+#spaceRail :focus-visible,
+#sidebar :focus-visible {
+  outline-color: var(--c-nav-text-active);
+}
 
 .meName {
   flex: none;
@@ -448,21 +472,31 @@ section.msgs {
      whole gesture of a Discord-style rail. It repaints, it does not reflow. */
   transition: border-radius var(--m-base) var(--m-spring),
     background-color var(--m-base) var(--m-ease),
-    color var(--m-base) var(--m-ease);
+    color var(--m-base) var(--m-ease),
+    transform var(--m-fast) var(--m-ease);
 }
+/* Presses have to answer on a phone, where there is no hover to answer first. */
+.sicon:active { transform: scale(0.93); }
 
 /* Per-Space identity. workspace.js writes --h on the tile; rotating a token
-   colour keeps every Space distinguishable without hardcoding a palette, and
-   the tint is weak enough that the initials keep their contrast. */
+   colour keeps every Space distinguishable without hardcoding a palette.
+
+   The mix is OPAQUE and blended toward --c-nav-hover on purpose. hue-rotate is
+   a colour matrix, not a hue shift: run it over a translucent, saturated source
+   and some angles collapse a channel and the tile comes out near-black - which
+   is exactly what happened to every Space on the colorful theme, where all the
+   tiles landed on the same muddy aubergine. Rotating an opaque colour that
+   already sits at the nav's own lightness keeps the lightness roughly put, so
+   the hues separate and the initials keep their contrast in all three themes. */
 .sicon::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--c-accent) 26%, transparent);
-  opacity: 0.8;
-  filter: hue-rotate(calc(var(--h, 220) * 1deg - 220deg));
+  background: color-mix(in srgb, var(--c-accent) 60%, var(--c-nav-hover));
+  opacity: 0.92;
+  filter: hue-rotate(calc(var(--h, 220) * 1deg - 220deg)) saturate(1.15);
   transition: opacity var(--m-base) var(--m-ease);
 }
 
@@ -552,7 +586,8 @@ section.msgs {
 #sidebar {
   flex: none;
   width: var(--sidebar-w);
-  padding: var(--s-4) var(--s-3) var(--s-9);
+  /* The bottom inset matters on a landscape iPad too, not only in the drawer. */
+  padding: var(--s-4) var(--s-3) calc(var(--s-9) + env(safe-area-inset-bottom));
   background: var(--c-nav-bg);
   border-right: 1px solid var(--c-nav-border);
   color: var(--c-nav-text);
@@ -573,6 +608,7 @@ section.msgs {
   border-color: color-mix(in srgb, var(--c-nav-text) 26%, transparent);
   color: var(--c-nav-text-active);
 }
+#sidebar #btnSpaces:active { background: var(--c-nav-active); }
 
 #sidebar h3 {
   display: flex;
@@ -588,10 +624,17 @@ section.msgs {
   text-transform: uppercase;
   cursor: pointer;
   user-select: none;
-  transition: color var(--m-fast) var(--m-ease);
+  transition: color var(--m-fast) var(--m-ease),
+    background-color var(--m-fast) var(--m-ease);
 }
 #sidebar h3:first-child { margin-top: var(--s-1); }
-#sidebar h3:hover { color: var(--c-nav-text-active); }
+/* A section header collapses its group, so it has to feel like a control and
+   not like a caption - a colour-only hover on 11px caps is easy to miss. */
+#sidebar h3:hover {
+  background: var(--c-nav-hover);
+  color: var(--c-nav-text-active);
+}
+#sidebar h3:active { background: var(--c-nav-active); }
 
 .navgroup {
   display: flex;
@@ -624,9 +667,19 @@ section.msgs {
    out of the corner of an eye. */
 .chan.active,
 .chan.active:hover {
+  background: var(--c-accent);
+  color: var(--c-text-inverse);
+  font-weight: var(--t-bold);
+}
+/* The dark theme's accent is a light blue - correct as text on a dark surface,
+   far too loud as a full-width fill behind one. --c-nav-active is the same idea
+   one step down, and it is the only place a theme needs its own answer. */
+:root[data-theme="dark"] .chan.active,
+:root[data-theme="dark"] .chan.active:hover,
+:root:not([data-theme]) .chan.active,
+:root:not([data-theme]) .chan.active:hover {
   background: var(--c-nav-active);
   color: var(--c-nav-text-active);
-  font-weight: var(--t-semibold);
 }
 .chan.active .ch-ico { color: var(--c-nav-text-active); }
 
@@ -755,7 +808,10 @@ aside#panel > header {
   align-items: center;
   gap: var(--s-4);
   height: var(--header-h);
-  padding: 0 var(--s-4) 0 var(--s-6);
+  /* Left padding matches .content below it, so the panel title and the first
+     thing in the panel share one edge. The right side is tighter because an
+     icon button is optically inset by its own padding already. */
+  padding: 0 var(--s-3) 0 var(--s-5);
   border-bottom: 1px solid var(--c-border);
   background: var(--c-surface);
 }
@@ -785,17 +841,25 @@ aside#panel > footer {
 
 /* ============================================================================
    DRAWER SCRIM
-   Dims the content while the phone drawer is open. It is painted as a
+   Dims the conversation while the phone drawer is open. It is painted as a
    pseudo-element of #messages so that the existing "tap the message list to
    close the nav" handler in main.js also catches a tap on the scrim: no JS
    change, no dead-end drawer. The class form is here for anything that would
    rather insert a real element.
+
+   It is absolutely positioned against section.msgs rather than fixed to the
+   viewport. Fixed + inset-left:--rail-w cut a rail-shaped notch out of the top
+   bar and the voice bar: the 60px above the rail stayed bright while the rest
+   of the same strip went grey, which read as a rendering fault. The message
+   column is a real boundary, so the scrim now dims exactly the thing the drawer
+   is covering, the rail and the header stay lit and stay tappable, and no
+   height has to be measured. section.msgs sets position:relative and #messages
+   is static, so the pseudo-element is not clipped by the list's own overflow.
    ========================================================================= */
 .drawer-scrim,
 #messages::after {
-  position: fixed;
-  /* Stops short of the rail, so switching Space stays one tap away. */
-  inset: 0 0 0 var(--rail-w);
+  position: absolute;
+  inset: 0;
   z-index: calc(var(--z-drawer) - 1);
   background: var(--c-scrim);
   opacity: 0;
@@ -822,6 +886,10 @@ body.nav-open #messages::after {
   :root {
     --rail-w: 60px;
     --sidebar-w: 272px;
+    /* 48px cannot hold a 44px thumb target and still look like it has air
+       around it. 56 is the phone header everywhere else, and it gives the panel
+       sheet's own header the same presence when it opens over the top. */
+    --header-h: 56px;
   }
 
   .only-mobile { display: inline-flex; }
@@ -833,14 +901,55 @@ body.nav-open #messages::after {
     gap: var(--s-2);
     padding: 0 var(--s-4);
     padding-top: env(safe-area-inset-top);
+    /* Last-resort guarantee that the header cannot push the page sideways.
+       Menus opened from it are position:fixed on the body, so nothing that
+       needs to escape is clipped. */
+    overflow: hidden;
   }
+  /* The channel name gets the leftover space, not the button row. */
   .hdr-title { flex: 1 1 auto; }
-  .hdr-actions { max-width: 46vw; }
+  /* Two and a bit 44px targets: enough that the strip reads as a row of icons
+     rather than one stranded button, and the mask says there is more to swipe. */
+  .hdr-actions { max-width: 34vw; }
+  /* Its twin lives in .hdr-actions and opens the same panel; two of them is a
+     luxury a 390px header cannot afford. */
+  #btnMembersCount { display: none; }
+
+  /* Installing matters most on a phone, so the button stays - but as its glyph.
+     A labelled button here shoulders the channel name out of the header, and
+     the title attribute still carries the meaning. */
+  #installBtn.install {
+    flex: none;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+  #installBtn.install::before {
+    content: "⬇";
+    font-size: var(--t-lg);
+    line-height: 1;
+  }
   /* Sign out moves out of the way of the things people tap every minute. It is
      still reachable from the profile panel. */
   #topbar #signout { display: none; }
 
   #voicebar { padding: var(--s-3) var(--s-5); }
+  /* A busy room must not eat the phone. Participants scroll sideways in their
+     own strip instead of wrapping the whole bar onto a fourth line; the mask is
+     the hint that the list keeps going. */
+  #vparts {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, currentColor calc(100% - 16px), transparent);
+    mask-image: linear-gradient(to right, currentColor calc(100% - 16px), transparent);
+  }
+  #vparts::-webkit-scrollbar { height: 0; }
 
   /* Off-canvas drawer. Absolute inside main means it lines up under the header
      and the voice bar without either of them being measured, and it clears the
@@ -858,7 +967,9 @@ body.nav-open #messages::after {
     bottom: 0;
     left: var(--rail-w);
     z-index: var(--z-drawer);
-    width: min(var(--sidebar-w), calc(100vw - var(--rail-w) - var(--s-11)));
+    /* Always leave a strip of the conversation showing: it is the scrim, it is
+       the tap-to-close target, and it keeps the drawer from reading as a page. */
+    width: min(var(--sidebar-w), calc(100vw - var(--rail-w) - var(--s-12)));
     padding-bottom: calc(var(--s-9) + env(safe-area-inset-bottom));
     box-shadow: var(--e-3);
     pointer-events: none;
@@ -915,7 +1026,7 @@ body.nav-open #messages::after {
     padding: 0 var(--s-3);
     padding-top: env(safe-area-inset-top);
   }
-  .hdr-actions { max-width: 38vw; }
+  .hdr-actions { max-width: 26vw; }
   .hdr-title strong { font-size: var(--t-base); }
   #hdrTopic { display: none; }
   .authwrap { padding: var(--s-6) var(--s-4) calc(var(--s-6) + env(safe-area-inset-bottom)); }
@@ -942,10 +1053,16 @@ body.nav-open #messages::after {
   #sidebar h3 { min-height: 40px; }
   .chan-add { font-size: var(--t-base); }
 
-  #topbar button.icon {
+  #topbar button.icon,
+  /* Closing a full-screen sheet is the only way back out of it on a phone, so
+     it gets the same floor as everything else in a header. */
+  aside#panel > header button.icon {
     min-width: 44px;
     min-height: 44px;
   }
+  /* Each Space's tint is the only thing telling the tiles apart, and on a phone
+     there is no hover to bring it up to full strength. Start it there. */
+  .sicon::after { opacity: 1; }
 
   /* No hover means no morph and no indicator stub: the open Space carries its
      bar at rest, and every tile is already a 44px target. */

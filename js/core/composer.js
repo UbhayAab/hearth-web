@@ -7,7 +7,7 @@ import { $, el, esc, debounce, throttle, fmtSize } from '../util.js';
 import { toast, listSlash, runSlash, renderComposerButtons } from '../ui.js';
 import { uploadFile } from './media.js';
 import { openEmojiPicker, searchEmoji } from './emoji.js';
-import { appendMessage, claimMessage, scrollDown } from './messages.js';
+import { appendMessage, claimMessage, scrollDown, upgradeMessageRow } from './messages.js';
 
 let pending = [];          // attachments being/already uploaded
 let ac = null;             // active autocomplete state
@@ -247,16 +247,13 @@ export async function send() {
       });
     }
     if (data) {
-      row.classList.remove('pending');
-      row.id = 'm' + data.id;
-      row.dataset.id = data.id;
       store.seen.add(data.id);
-      store.msgCache.set(data.id, data);
       store.cursor = Math.max(store.cursor, data.seq || 0);
-      // rebuild so the real row has action buttons + reaction target ids
-      const rebuilt = appendMessage(document.createElement('div'), data,
-        store.currentDM ? 'dm' : 'channel');
-      row.replaceWith(rebuilt);
+      // Re-point the row that is already on screen at the real message. Not a
+      // replacement: the optimistic node stays, so its grouping against the
+      // message above it survives and nothing holding a reference to it (a
+      // hover, a scroll anchor) is left on a detached element.
+      upgradeMessageRow(row, data, store.currentDM ? 'dm' : 'channel');
       scrollDown();
     }
   } catch (e) {

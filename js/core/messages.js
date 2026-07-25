@@ -9,6 +9,7 @@ import { QUICK_EMOJI } from '../config.js';
 import { getMessageActions, toast, contextMenu } from '../ui.js';
 import { attsHtml, hydrateMedia } from './media.js';
 import { openEmojiPicker } from './emoji.js';
+import { icon } from '../icons.js';
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
@@ -82,7 +83,7 @@ export function buildMessage(m, opts = {}) {
       b.onclick = () => toggleReaction(m.id, e);
       bar.appendChild(b);
     }
-    const more = el('button', 'icon', '😊');
+    const more = el('button', 'icon', icon('smile'));
     more.title = 'Pick a reaction';
     more.onclick = () => openEmojiPicker(more, (ch) => toggleReaction(m.id, ch));
     bar.appendChild(more);
@@ -173,15 +174,22 @@ export function scrollDown() {
 
 // ------------------------------------------------------------------ list append
 // Appends into `host`, deciding grouping and day dividers from the previous row.
-export function appendMessage(host, m, context = 'channel') {
-  const last = host.lastElementChild;
+// `opts.replacing` swaps an existing row (the optimistic one) for a freshly
+// built row. Grouping is decided from the neighbour ABOVE that row rather than
+// from the end of the list, and the new node is inserted before the old one is
+// removed, so there is never an instant where the message is missing from the
+// DOM - a remove-then-append leaves a gap that anything holding a reference
+// (a hover, a scroll, a test) trips over.
+export function appendMessage(host, m, context = 'channel', opts = {}) {
+  const anchor = opts.replacing || null;
+  const last = anchor ? anchor.previousElementSibling : host.lastElementChild;
   const lastAuthor = last?.dataset?.author;
   const lastTime = last?.dataset?.time ? +last.dataset.time : 0;
   const t = new Date(m.created_at || Date.now()).getTime();
 
   const lastDay = last?.dataset?.day;
   const day = dayOf(m.created_at || Date.now());
-  if (day !== lastDay) {
+  if (day !== lastDay && !anchor) {
     const d = el('div', 'daydiv', `<span>${esc(day)}</span>`);
     d.dataset.day = day;
     host.appendChild(d);
@@ -194,7 +202,61 @@ export function appendMessage(host, m, context = 'channel') {
   const row = buildMessage(m, { context, grouped });
   row.dataset.time = t;
   row.dataset.day = day;
-  host.appendChild(row);
+  if (anchor) {
+    anchor.parentNode.insertBefore(row, anchor);
+    anchor.remove();
+  } else {
+    host.appendChild(row);
+  }
+  return row;
+}
+
+// Promote an optimistic row to a real one WITHOUT replacing the node.
+//
+// The optimistic row is rendered against a temporary id (the send nonce), so its
+// reaction target, thread target and action handlers all point at something the
+// server has never heard of. Swapping in a freshly built row fixes that but
+// destroys and recreates the element, and anything holding a reference to it -
+// a hover, a scroll anchor, a pointer already pressed - is left pointing at a
+// detached node. Rebinding in place keeps one stable element for the lifetime of
+// the message.
+export function upgradeMessageRow(row, m, context = 'channel') {
+  if (!row || !m?.id) return row;
+  row.id = 'm' + m.id;
+  row.dataset.id = m.id;
+  row.dataset.seq = m.seq ?? '';
+  row.classList.remove('pending');
+
+  row.querySelector('[data-rx]')?.setAttribute('data-rx', m.id);
+  row.querySelector('[data-th]')?.setAttribute('data-th', m.id);
+
+  const bar = row.querySelector('.actions');
+  if (bar && context !== 'static') {
+    bar.innerHTML = '';
+    for (const e of QUICK_EMOJI) {
+      const b = el('button', 'icon quick', e);
+      b.title = 'React ' + e;
+      b.onclick = () => toggleReaction(m.id, e);
+      bar.appendChild(b);
+    }
+    const more = el('button', 'icon', icon('smile'));
+    more.title = 'Pick a reaction';
+    more.onclick = () => openEmojiPicker(more, (ch) => toggleReaction(m.id, ch));
+    bar.appendChild(more);
+    for (const a of getMessageActions({ ...m, _context: context })) {
+      if (a.contexts && !a.contexts.includes(context)) continue;
+      const b = el('button', 'icon', a.label);
+      b.title = a.title || a.label;
+      b.onclick = (ev) => a.onClick(m, ev, row);
+      bar.appendChild(b);
+    }
+  }
+
+  const ti = row.querySelector('[data-th]');
+  if (ti) ti.onclick = () => bus.emit('thread:request', { message: m });
+
+  store.msgCache.set(m.id, m);
+  paintReactions(m.id);
   return row;
 }
 

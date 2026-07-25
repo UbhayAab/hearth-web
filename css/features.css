@@ -39,7 +39,20 @@
    poll, an event and a link preview looking like one product.
    ========================================================================= */
 
-/* ------------------------------------------------------------------ card */
+/* ------------------------------------------------------------------ card
+   overflow-wrap is reset here on purpose. .body sets `anywhere`, which is right
+   for a pasted URL in a paragraph but ruinous inside a card: `anywhere` lowers
+   a box's min-content width to one character, so a flex item next to a fixed
+   one collapses and the title renders one letter per line. */
+:root .poll-card,
+:root .ev-card,
+:root .mx-link,
+:root .mx-ack,
+:root .forum-card {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
 :root .poll-card,
 :root .ev-card,
 :root .mx-link,
@@ -69,7 +82,9 @@
 :root .hstatus-seg > button,
 :root .hnotif-seg:not(.row) > button {
   position: relative;
-  flex: 1 1 0;
+  /* basis auto, not 0: "Do not disturb" needs more room than "Away", and equal
+     thirds would clip it. The cells still grow to fill the whole track. */
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 34px;
   margin-left: -1px;           /* collapse the hairline shared by two cells */
@@ -176,7 +191,7 @@
   font-size: var(--t-md);
   font-weight: var(--t-semibold);
   line-height: var(--t-snug);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 :root .poll-tag {
@@ -209,6 +224,8 @@
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-start;   /* components.css centres every button */
+  white-space: normal;           /* ...and stops every button from wrapping */
   gap: var(--s-4);
   width: 100%;
   min-height: 38px;
@@ -260,7 +277,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 :root .poll-num {
   position: relative;
@@ -336,9 +353,11 @@
 
 /* The date block is a tile rather than a line of text, so a column of events
    scans by date the way a calendar does. */
+/* A fixed width, not `flex: none` on auto: the time string is long enough that
+   max-content sizing would eat the whole row and squeeze the title to nothing. */
 :root .ev-when {
   flex: none;
-  min-width: 86px;
+  width: 114px;
   padding: var(--s-3) var(--s-4);
   border: 1px solid var(--c-border);
   border-radius: var(--r-md);
@@ -356,9 +375,12 @@
 :root .ev-time {
   margin-top: var(--s-1);
   color: var(--c-text-2);
-  font-size: var(--t-sm);
-  line-height: var(--t-tight);
+  font-size: var(--t-xs);
+  line-height: var(--t-snug);
   font-variant-numeric: tabular-nums;
+  /* "6:44 PM - 7:51 PM" is one character too wide for the tile: balance splits
+     it at the dash instead of orphaning the trailing "PM". */
+  text-wrap: balance;
 }
 
 :root .ev-main { flex: 1; min-width: 0; }
@@ -367,14 +389,14 @@
   font-size: var(--t-md);
   font-weight: var(--t-semibold);
   line-height: var(--t-snug);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 :root .ev-loc {
   margin-top: var(--s-1);
   color: var(--c-text-2);
   font-size: var(--t-sm);
   line-height: var(--t-snug);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Solid, not tinted: CANCELLED has to be the loudest thing on the card. */
@@ -405,7 +427,7 @@
   font-size: var(--t-base);
   line-height: var(--t-body);
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 :root .ev-counts {
   margin: var(--s-5) 0 var(--s-4);
@@ -499,7 +521,7 @@
   color: var(--c-text);
   line-height: var(--t-loose);
   cursor: text;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   transition: background var(--m-fast) var(--m-ease);
 }
 :root .cv-view:hover { background: var(--c-surface-2); }
@@ -752,7 +774,7 @@
   font-size: var(--t-md);
   font-weight: var(--t-semibold);
   line-height: var(--t-snug);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 :root .fc-meta {
   display: flex;
@@ -788,7 +810,7 @@
   font-size: var(--t-lg);
   font-weight: var(--t-semibold);
   line-height: var(--t-snug);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 :root .forum-postmsgs { --gutter: 34px; }
 
@@ -927,6 +949,7 @@
 :root .hstatus-preset {
   display: flex;
   align-items: center;
+  justify-content: flex-start;   /* components.css centres every button */
   gap: var(--s-4);
   width: 100%;
   min-height: 36px;
@@ -1316,6 +1339,10 @@
   padding: var(--s-2) 0;
   font-size: var(--t-base);
 }
+/* Keys last, the way every shortcut sheet prints them: the descriptions then
+   share one left edge instead of stepping in and out with the key count.
+   Command rows keep their natural order - there the /name IS the subject. */
+:root .sc-row:not(.sc-cmd) { flex-direction: row-reverse; }
 :root .sc-row .sc-what { flex: 1; min-width: 0; color: var(--c-text-2); }
 
 :root .sc-keys { display: flex; flex: none; gap: var(--s-1); }
@@ -1339,9 +1366,12 @@
   white-space: nowrap;
 }
 :root .sc-cmd code {
-  min-width: 0;
+  flex: none;
+  min-width: 5.5em;              /* one left edge for the descriptions beside them */
+  padding-inline: var(--s-3);
   color: var(--c-text);
   font-family: var(--t-mono);
+  text-align: left;
 }
 :root .sc-cmd { font-size: var(--t-sm); }
 
@@ -1445,7 +1475,7 @@
   color: var(--c-text);
 }
 
-:root .bmk-note { color: var(--c-text-2); font-size: var(--t-sm); white-space: nowrap; }
+:root .bmk-note { flex: none; color: var(--c-text-2); font-size: var(--t-sm); white-space: nowrap; }
 :root .bmk-note.bmk-err { color: var(--c-danger); }
 
 :root .bmk-row { display: flex; align-items: center; gap: var(--s-4); }
@@ -1516,8 +1546,18 @@
 
   :root .mx-link { max-width: 100%; }
 
+  /* messages.css floats a 128x44 notch into the top-right of every message
+     body on a phone so the hover action bar never sits on a word. Text flows
+     around it, but a card whose head is a flex row establishes its own
+     formatting context and gets shrunk to ~109px instead of flowing. Clearing
+     the notch puts the card back on the full column, under the action bar. */
+  :root .poll-card,
+  :root .ev-card,
+  :root .mx-ack,
+  :root .mx-link { clear: right; }
+
   :root .ev-head { gap: var(--s-4); }
-  :root .ev-when { min-width: 76px; }
+  :root .ev-when { width: 96px; }
   /* At 360px the three cells share the row and the cancel button drops below. */
   :root .ev-rsvp > button:not(.ev-cancel) { flex: 1 1 0; min-width: 0; }
   :root .ev-cancel { margin-left: auto; }
@@ -1537,6 +1577,11 @@
   :root .hnotif-row .hnotif-seg { flex: 1 1 auto; }
   :root .hnotif-hours { flex-wrap: wrap; }
   :root .hnotif-hours button { width: 100%; }
+
+  /* "Jump to newest" will not fit beside the rule and its label at 360px, and a
+     clipped button is worse than a wrapped one. Give it a line of its own. */
+  :root .mx-newdiv { row-gap: var(--s-3); }
+  :root .mx-newdiv > button { flex: 1 0 100%; }
 
   :root .sc-grid { grid-template-columns: 1fr; gap: 0; }
 

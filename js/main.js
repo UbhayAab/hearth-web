@@ -17,7 +17,20 @@ import { openDM, startDM } from './core/dms.js';
 import { jumpTo, buildMessage } from './core/messages.js';
 import { initPWA, paintInstallButton } from './pwa.js';
 import { initTheme, openThemePicker, cycleTheme } from './theme.js';
+import { icon, logoMark } from './icons.js';
 import { registerFeatures } from './features/index.js';
+
+// Any element carrying data-ico gets its SVG injected. Keeping the markup
+// declarative means index.html stays readable and the icon set can change
+// without touching the shell.
+function hydrateIcons(root) {
+  for (const n of root.querySelectorAll('[data-ico]')) {
+    if (n.firstElementChild?.classList.contains('ico')) continue;
+    n.insertAdjacentHTML('afterbegin', icon(n.dataset.ico));
+  }
+  const mark = root.querySelector?.('#brandMark');
+  if (mark && !mark.firstElementChild) mark.innerHTML = logoMark(44);
+}
 
 // ------------------------------------------------------------------ routing
 function route() {
@@ -141,11 +154,11 @@ function flashTitle() {
   clearInterval(titleTimer);
   let on = false;
   titleTimer = setInterval(() => {
-    document.title = (on = !on) ? '● Hearth' : 'Hearth';
+    document.title = (on = !on) ? '● Retry' : 'Retry';
   }, 900);
   document.addEventListener('visibilitychange', function once() {
     clearInterval(titleTimer);
-    document.title = 'Hearth';
+    document.title = 'Retry';
     document.removeEventListener('visibilitychange', once);
   });
 }
@@ -241,6 +254,7 @@ async function main() {
   if (r.kind === 'join') stashPendingInvite(r.token);
 
   initTheme();
+  hydrateIcons(document);
   initAuth(enter);
   initComposer();
   initVoice();
@@ -279,5 +293,5 @@ window.addEventListener('hashchange', () => {
 
 main().catch((e) => {
   console.error(e);
-  document.body.innerHTML = `<pre style="padding:20px;color:#f88">Hearth failed to start:\n${esc(e.stack || e.message)}</pre>`;
+  document.body.innerHTML = `<pre style="padding:20px;color:#f88">Retry failed to start:\n${esc(e.stack || e.message)}</pre>`;
 });

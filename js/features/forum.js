@@ -10,6 +10,7 @@ import { PERM } from '../config.js';
 import { $, el, esc, relTime, plain } from '../util.js';
 import { table } from '../api.js';
 import { avatarHtml, buildMessage } from '../core/messages.js';
+import { icon } from '../icons.js';
 
 let ui, api, store, bus, sb;
 
@@ -32,7 +33,7 @@ export function register(app) {
   });
 
   ui.addHeaderButton({
-    id: 'forum-new', label: '✚', title: 'New forum post', order: 45,
+    id: 'forum-new', label: icon('plus'), title: 'New forum post', order: 45,
     show: () => store.current?.kind === 'forum',
     onClick: () => (owned ? newPostDialog(owned) : ui.toast('Open a forum channel first', 'error')),
   });

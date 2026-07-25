@@ -8,6 +8,7 @@ import { nameOf, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { tryRpc } from '../api.js';
 import { el, esc, fmt, relTime } from '../util.js';
+import { icon } from '../icons.js';
 
 const STYLE_ID = 'onb-style';
 const STYLE = `
@@ -471,7 +472,7 @@ export function register(app) {
 
   // ---------------------------------------------------------------- header
   ui.addHeaderButton({
-    id: 'onboarding', label: '🚪', title: 'Joining this Space', order: 195,
+    id: 'onboarding', label: icon('lock'), title: 'Joining this Space', order: 195,
     // Admins manage the gate; everyone else still needs a door to the roles on offer.
     show: () => canGate() || canDecide() || canManageRoles() || hasSelfRoles,
     onClick: () => ui.openPanel('onboarding'),

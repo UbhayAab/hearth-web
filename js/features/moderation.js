@@ -9,6 +9,7 @@
 import { nameOf, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { $, el, esc, fmt, plain, relTime } from '../util.js';
+import { icon } from '../icons.js';
 
 const STYLE_ID = 'mod-style';
 const STYLE = `
@@ -364,7 +365,7 @@ export function register(app) {
 
   // ---------------------------------------------------------------- header
   ui.addHeaderButton({
-    id: 'moderation', label: '🛡', title: 'Moderation', order: 190,
+    id: 'moderation', label: icon('shield'), title: 'Moderation', order: 190,
     show: () => canModerate(),
     onClick: () => ui.openPanel('moderation'),
   });

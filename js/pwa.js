@@ -41,7 +41,7 @@ export function initPWA() {
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
     paintInstallButton();
-    toast('Hearth installed. Look for it with your other apps.');
+    toast('Retry installed. Look for it with your other apps.');
   });
 
   paintInstallButton();
@@ -74,7 +74,7 @@ export async function promptInstall() {
   }
   if (isIOS) return iosSheet();
   modal({
-    title: 'Install Hearth',
+    title: 'Install Retry',
     body: `<p>Your browser has not offered an install prompt yet. Use the browser menu and choose
       <b>Install app</b> or <b>Add to Home screen</b>.</p>
       <p class="muted">On Chrome or Edge desktop the install icon also appears at the right edge of the address bar.</p>`,
@@ -83,12 +83,12 @@ export async function promptInstall() {
 
 function iosSheet() {
   modal({
-    title: 'Add Hearth to your Home Screen',
+    title: 'Add Retry to your Home Screen',
     body: `
       <ol class="ios-steps">
         <li>Tap the <b>Share</b> button <span class="ios-ico">􀈂</span> at the bottom of Safari.</li>
         <li>Scroll down and tap <b>Add to Home Screen</b>.</li>
-        <li>Tap <b>Add</b>. Hearth opens full screen, like an app.</li>
+        <li>Tap <b>Add</b>. Retry opens full screen, like an app.</li>
       </ol>
       ${isIOSSafari ? '' :
         '<p class="muted">You are not in Safari. On iPhone only Safari can add an app to the Home Screen - open this page in Safari first.</p>'}`,
@@ -96,7 +96,7 @@ function iosSheet() {
 }
 
 function showUpdateToast(reg) {
-  const t = toast('A new version of Hearth is ready.', 'info', 20000);
+  const t = toast('A new version of Retry is ready.', 'info', 20000);
   const b = el('button', 'sm', 'Reload');
   b.onclick = () => {
     reg.waiting?.postMessage({ type: 'SKIP_WAITING' });

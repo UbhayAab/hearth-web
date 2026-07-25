@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
-<title>Hearth</title>
-<meta name="description" content="Hearth - invite-only team chat: channels, threads that stay out of the way, voice rooms and high-fidelity media." />
+<title>Retry</title>
+<meta name="description" content="Retry - invite-only team chat: channels, threads that stay out of the way, voice rooms and high-fidelity media. A Redtree product." />
 <meta name="theme-color" content="#0f1115" />
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icons/icon-192.png" />
 <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Hearth" />
+<meta name="apple-mobile-web-app-title" content="Retry" />
 <meta name="mobile-web-app-capable" content="yes" />
 
 <!-- Paint the stored theme before the first frame. Doing this from a module
@@ -41,6 +41,7 @@
 <link rel="stylesheet" href="./css/messages.css" />
 <link rel="stylesheet" href="./css/panels.css" />
 <link rel="stylesheet" href="./css/features.css" />
+<link rel="stylesheet" href="./css/reading.css" />
 </head>
 <body>
 <div id="app">
@@ -48,7 +49,7 @@
   <!-- ================= AUTH ================= -->
   <div id="auth" class="authwrap hidden">
     <div class="authcard">
-      <div class="brand"><span class="brand-mark">🔥</span><h1>Hearth</h1></div>
+      <div class="brand"><span class="brand-mark" id="brandMark"></span><h1>Retry</h1></div>
       <p class="tagline">Channels and voice rooms like Discord. Threads that never shout over the room, like Slack. Media that stays right here, like WhatsApp.</p>
 
       <label class="field"><span class="field-label">Your name</span>
@@ -90,36 +91,36 @@
       <div class="or"><span>or</span></div>
       <button id="guestBtn" class="ghost wide">Continue as a guest</button>
       <div id="authErr" class="autherr hidden"></div>
-      <p class="muted fineprint">Guest sessions are real accounts without an email. You can open an invite link at any time to join a Space.</p>
+      <p class="muted fineprint">Guest sessions are real accounts without an email. You can open an invite link at any time to join a Space. <span class="byline">A Redtree product.</span></p>
     </div>
   </div>
 
   <!-- ================= CHAT ================= -->
   <div id="chat" class="hidden">
     <header id="topbar">
-      <button class="icon only-mobile" id="navToggle" title="Channels">☰</button>
+      <button class="icon only-mobile" id="navToggle" title="Channels" data-ico="menu"></button>
       <strong id="spaceName"></strong>
       <div class="hdr-title">
         <strong id="hdrName">#</strong>
         <span class="muted" id="hdrTopic"></span>
       </div>
       <span class="sp"></span>
-      <button id="installBtn" class="install hidden" title="Install Hearth as an app">⬇ Install app</button>
+      <button id="installBtn" class="install hidden" title="Install Retry as an app"><span data-ico="download"></span> Install</button>
       <button id="btnInvite" class="sm" title="Invite people to this Space">Invite</button>
       <div id="headerActions" class="hdr-actions"></div>
-      <button class="icon" id="btnTheme" title="Appearance" aria-label="Change appearance">◐</button>
+      <button class="icon" id="btnTheme" title="Appearance" aria-label="Change appearance" data-ico="contrast"></button>
       <button class="icon" id="btnMembersCount" title="Online"><span class="dot on"></span><span id="onlineCount">1</span></button>
       <span class="muted meName" id="meName"></span>
       <button class="ghost sm" id="signout">Sign out</button>
     </header>
 
     <div id="voicebar" class="hidden">
-      <strong class="vlabel">🔊 <span id="vchanName"></span></strong>
+      <strong class="vlabel"><span data-ico="volume"></span> <span id="vchanName"></span></strong>
       <span id="vparts"></span>
       <span class="sp"></span>
       <button class="ghost sm" id="vptt">PTT off</button>
-      <button class="ghost sm on" id="vdeafen">🎧 Deafen</button>
-      <button class="ghost sm on" id="vmute">🎤 Mute</button>
+      <button class="ghost sm on" id="vdeafen"><span data-ico="headphones"></span> Deafen</button>
+      <button class="ghost sm on" id="vmute"><span data-ico="mic"></span> Mute</button>
       <button class="danger sm" id="vleave">Leave</button>
     </div>
 
@@ -127,7 +128,7 @@
       <div id="spaceRail"></div>
 
       <nav id="sidebar">
-        <button class="ghost sm wide" id="btnSpaces">＋ Create or join a Space</button>
+        <button class="ghost sm wide" id="btnSpaces"><span data-ico="plus"></span> Create or join a Space</button>
         <div id="channels"></div>
         <div id="navExtra"></div>
       </nav>
@@ -141,11 +142,11 @@
           <div id="replyBar" class="hidden"></div>
           <div id="attachChips" class="hidden"></div>
           <div class="crow">
-            <button class="icon" id="attachBtn" title="Attach a file">📎</button>
+            <button class="icon" id="attachBtn" title="Attach a file" data-ico="paperclip"></button>
             <div id="composerTools" class="ctools"></div>
             <textarea id="composer" rows="1" placeholder="Message"></textarea>
-            <button class="icon" id="emojiBtn" title="Emoji">😊</button>
-            <button class="icon send" id="sendBtn" title="Send">➤</button>
+            <button class="icon" id="emojiBtn" title="Emoji" data-ico="smile"></button>
+            <button class="icon send" id="sendBtn" title="Send" data-ico="send"></button>
           </div>
         </footer>
         <div id="dropHint" class="hidden">Drop files to share them here</div>
@@ -155,7 +156,7 @@
         <header>
           <strong id="panelTitle">Panel</strong>
           <span class="sp"></span>
-          <button class="icon" id="panelClose" title="Close">✕</button>
+          <button class="icon" id="panelClose" title="Close" data-ico="close"></button>
         </header>
         <div class="content" id="panelContent"></div>
         <footer id="panelFooter" class="hidden"></footer>

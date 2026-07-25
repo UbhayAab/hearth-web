@@ -8,6 +8,7 @@
 import { table, tryRpc } from '../api.js';
 import { store, bus, nameOf } from '../store.js';
 import { el, esc, fmt, plain, relTime } from '../util.js';
+import { icon } from '../icons.js';
 
 const PANEL = 'later';
 const BTN = 'later';
@@ -142,7 +143,7 @@ export function register({ ui, api }) {
   });
 
   ui.addHeaderButton({
-    id: BTN, label: '📥', title: 'Later queue', order: 90,
+    id: BTN, label: icon('bookmark'), title: 'Later queue', order: 90,
     onClick: () => ui.openPanel(PANEL, {}),
   });
 

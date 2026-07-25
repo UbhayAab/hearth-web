@@ -8,6 +8,7 @@
 // so the desktop toast and the push notification agree.
 import { store, bus, nameOf } from '../store.js';
 import { el, esc, plain } from '../util.js';
+import { icon } from '../icons.js';
 
 const MIN = 60000;
 const HOUR = 3600000;
@@ -363,7 +364,7 @@ export function register({ ui, api }) {
 
   ui.addHeaderButton({
     id: 'notifications',
-    label: '🔕',
+    label: icon('bell'),
     title: 'Notification settings',
     order: 85,
     onClick: () => ui.openPanel('notifications'),

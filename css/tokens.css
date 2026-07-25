@@ -98,8 +98,16 @@
   --rail-w: 68px;
   --sidebar-w: 260px;
   --panel-w: 400px;
-  --gutter: 40px;      /* avatar column in the message list */
-  --header-h: 48px;
+  --gutter: 44px;      /* avatar column in the message list */
+  --header-h: 52px;
+
+  /* The measure. On a 27 inch monitor an unconstrained message list runs the
+     full 1900px, and reading it means physically turning your head from one
+     side of the screen to the other. Typography caps a comfortable line at
+     roughly 90 characters; this is that, plus the avatar gutter. The column is
+     centred, so the conversation sits in front of you instead of smeared across
+     the desk. */
+  --reading-max: 1080px;
 }
 
 /* ============================================================================

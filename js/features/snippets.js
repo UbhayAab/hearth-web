@@ -7,6 +7,7 @@
 import { tryRpc } from '../api.js';
 import { store, bus } from '../store.js';
 import { $, el, esc, relTime } from '../util.js';
+import { icon } from '../icons.js';
 
 const PANEL = 'snippets';
 
@@ -236,7 +237,7 @@ export function register({ ui, api }) {
   });
 
   ui.addComposerButton({
-    id: 'snippet', label: '&lt;/&gt;', title: 'Create a code snippet',
+    id: 'snippet', label: icon('code'), title: 'Create a code snippet',
     onClick: () => snippetDialog(),
   });
   // The composer toolbar is painted during boot, before features finish loading.

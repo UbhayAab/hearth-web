@@ -10,6 +10,7 @@
 import { table } from '../api.js';
 import { store, bus } from '../store.js';
 import { $, el, esc, plain } from '../util.js';
+import { icon } from '../icons.js';
 
 const MIN = 60000;
 const HOUR = 3600000;
@@ -68,11 +69,13 @@ function paintChip() {
       chip.title = `${emoji} ${text}`.trim();
     }
   }
-  // The header button doubles as the status indicator, so it mirrors the emoji.
+  // The header button doubles as the status indicator. A status emoji someone
+  // chose is CONTENT and shows as-is; with no status set it falls back to the
+  // drawn icon so the chrome stays one visual family.
   if (headerDef) {
-    headerDef.label = emoji || '🙂';
+    headerDef.label = emoji || icon('smile');
     const btn = document.getElementById('hb-status');
-    if (btn) btn.textContent = headerDef.label;
+    if (btn) btn.innerHTML = headerDef.label;
   }
 }
 
@@ -293,7 +296,7 @@ export function register({ ui, api }) {
 
   headerDef = {
     id: 'status',
-    label: '🙂',
+    label: icon('smile'),
     title: 'Your status and availability',
     order: 95,
     onClick: (e) => openStatusPopover(e.currentTarget || document.getElementById('hb-status'), ui, api),

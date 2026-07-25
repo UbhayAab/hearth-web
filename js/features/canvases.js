@@ -8,6 +8,7 @@ import hljs from 'https://esm.sh/highlight.js@11.10.0';
 import { nameOf } from '../store.js';
 import { tryRpc } from '../api.js';
 import { el, esc, fmt, relTime, debounce } from '../util.js';
+import { icon } from '../icons.js';
 
 let ui, api, store, bus;
 
@@ -468,7 +469,7 @@ export function register(app) {
   });
 
   ui.addHeaderButton({
-    id: 'canvases', label: '📄', title: 'Canvases', order: 75,
+    id: 'canvases', label: icon('doc'), title: 'Canvases', order: 75,
     onClick: () => ui.openPanel('canvases'),
   });
 
@@ -493,7 +494,7 @@ export function register(app) {
     search: (q) => cache
       .filter((c) => !q || (c.title || '').toLowerCase().includes(q.toLowerCase()))
       .slice(0, 6)
-      .map((c) => ({ label: c.title || 'Untitled', hint: 'Canvas', icon: '📄', run: () => openEditor(c.id) })),
+      .map((c) => ({ label: c.title || 'Untitled', hint: 'Canvas', icon: icon('doc'), run: () => openEditor(c.id) })),
   });
 
   bus.on('workspace', () => { cache = []; warmCache(); });

@@ -9,6 +9,7 @@ import { $, el, esc, fmt, plain, relTime, timeOf, toLocalInput, fromLocalInput }
 import { addMessageAction, addHeaderButton, registerPanel, openPanel, toast, modal,
   formModal, confirmModal, contextMenu, addSwitcherSource } from '../ui.js';
 import { buildMessage, avatarHtml, jumpTo } from './messages.js';
+import { icon } from '../icons.js';
 import { setReply } from './composer.js';
 import { openThread } from './threads.js';
 import { openChannel } from './channels.js';
@@ -19,16 +20,16 @@ const mine = (m) => m.author_id === store.me;
 // ------------------------------------------------------------------ actions
 export function registerCoreActions() {
   addMessageAction({
-    id: 'thread', label: '💬', title: 'Reply in thread', order: 10,
+    id: 'thread', label: icon('thread'), title: 'Reply in thread', order: 10,
     contexts: ['channel'],
     onClick: (m) => openThread(m),
   });
   addMessageAction({
-    id: 'reply', label: '↩', title: 'Quote reply (posts to the channel)', order: 20,
+    id: 'reply', label: icon('reply'), title: 'Quote reply (posts to the channel)', order: 20,
     onClick: (m) => setReply(m),
   });
   addMessageAction({
-    id: 'more', label: '⋯', title: 'More actions', order: 900,
+    id: 'more', label: icon('more'), title: 'More actions', order: 900,
     onClick: (m, ev) => moreMenu(m, ev),
   });
 }
@@ -349,12 +350,12 @@ registerPanel({
 
 // ------------------------------------------------------------------ header
 export function registerCoreHeader() {
-  addHeaderButton({ id: 'threads', label: '💬', title: 'Threads', order: 10, onClick: () => openPanel('threads-list') });
-  addHeaderButton({ id: 'activity', label: '🔔', title: 'Activity', order: 20, onClick: () => openPanel('activity') });
-  addHeaderButton({ id: 'saved', label: '🔖', title: 'Saved and Later', order: 30, onClick: () => openPanel('saved') });
-  addHeaderButton({ id: 'search', label: '🔍', title: 'Search (Ctrl+K)', order: 40, onClick: () => openPanel('search', {}) });
-  addHeaderButton({ id: 'pins', label: '📌', title: 'Pinned', order: 50, onClick: () => openPanel('pins') });
-  addHeaderButton({ id: 'members', label: '👥', title: 'Members', order: 60, onClick: () => openPanel('members') });
+  addHeaderButton({ id: 'threads', label: icon('thread'), title: 'Threads', order: 10, onClick: () => openPanel('threads-list') });
+  addHeaderButton({ id: 'activity', label: icon('bell'), title: 'Activity', order: 20, onClick: () => openPanel('activity') });
+  addHeaderButton({ id: 'saved', label: icon('bookmark'), title: 'Saved and Later', order: 30, onClick: () => openPanel('saved') });
+  addHeaderButton({ id: 'search', label: icon('search'), title: 'Search (Ctrl+K)', order: 40, onClick: () => openPanel('search', {}) });
+  addHeaderButton({ id: 'pins', label: icon('pin'), title: 'Pinned', order: 50, onClick: () => openPanel('pins') });
+  addHeaderButton({ id: 'members', label: icon('members'), title: 'Members', order: 60, onClick: () => openPanel('members') });
 
   addSwitcherSource({
     id: 'channels',

@@ -10,6 +10,7 @@ import { store, bus, nameOf, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { el, esc, relTime, fromLocalInput } from '../util.js';
 import { getSub } from '../sb.js';
+import { icon } from '../icons.js';
 
 const MAX_FORM_OPTIONS = 6;
 
@@ -320,7 +321,7 @@ export function register({ ui }) {
 
   ui.addComposerButton({
     id: 'poll',
-    label: '📊',
+    label: icon('chart'),
     title: 'Create a poll',
     onClick: () => pollDialog(ui),
   });
@@ -329,7 +330,7 @@ export function register({ ui }) {
   ui.renderComposerButtons();
 
   ui.addHeaderButton({
-    id: 'polls', label: '📊', title: 'Polls', order: 75,
+    id: 'polls', label: icon('chart'), title: 'Polls', order: 75,
     onClick: () => ui.openPanel('polls'),
   });
 

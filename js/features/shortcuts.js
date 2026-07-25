@@ -8,6 +8,7 @@
 import { store, bus, nameOf } from '../store.js';
 import { table } from '../api.js';
 import { el, esc, fmt, plain, relTime, debounce } from '../util.js';
+import { icon } from '../icons.js';
 
 const MOD = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
 
@@ -281,7 +282,7 @@ export function register(app) {
 
   ui.addHeaderButton({
     id: 'drafts',
-    label: '📝<span class="badge sc-dcount"></span>',
+    label: icon('edit') + '<span class="badge sc-dcount"></span>',
     title: 'Unsent drafts',
     order: 70,
     show: () => draftCount > 0,
@@ -396,6 +397,6 @@ export function register(app) {
   });
 
   ui.addHeaderButton({
-    id: 'shortcuts', label: '?', title: 'Keyboard shortcuts (?)', order: 999, onClick: helpModal,
+    id: 'shortcuts', label: icon('keyboard'), title: 'Keyboard shortcuts (?)', order: 999, onClick: helpModal,
   });
 }

@@ -12,6 +12,7 @@ import { api, table } from '../api.js';
 import { store, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { el, esc, relTime, plain } from '../util.js';
+import { icon } from '../icons.js';
 
 const canAdmin = () => hasPerm(PERM.MANAGE_WORKSPACE) || store.isAdmin;
 
@@ -543,7 +544,7 @@ export function register(app) {
 
   ui.addHeaderButton({
     id: 'admin',
-    label: '⚙️',
+    label: icon('settings'),
     title: 'Admin console',
     order: 200,
     show: canAdmin,

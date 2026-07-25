@@ -61,15 +61,21 @@
   background: var(--c-mention);
   box-shadow: inset 3px 0 0 var(--c-mention-edge);
 }
-/* Hovering a tinted row nudges it toward the text colour, which darkens it on
-   the light themes and lightens it on dark - one rule, correct in all three. */
-.msg.mention:hover { background: color-mix(in srgb, var(--c-text) 7%, var(--c-mention)); }
+/* Hover on a tinted row lays a second translucent wash over the same fill
+   rather than mixing a new colour. It deepens the cream on the light themes and
+   lifts the olive on dark - correct in all three - and it leaves
+   background-color as the row's real, opaque mention colour. */
+.msg.mention:hover {
+  background-image: linear-gradient(var(--c-warn-quiet), var(--c-warn-quiet));
+}
 
 .msg.urgent {
   background: var(--c-danger-quiet);
   box-shadow: inset 3px 0 0 var(--c-danger);
 }
-.msg.urgent:hover { background: color-mix(in srgb, var(--c-text) 6%, var(--c-danger-quiet)); }
+.msg.urgent:hover {
+  background-image: linear-gradient(var(--c-danger-quiet), var(--c-danger-quiet));
+}
 
 /* In flight: dimmed but still legible, and non-interactive so a stray tap
    cannot act on a message that has no id yet. */
@@ -516,7 +522,10 @@
   border-color: var(--c-accent);
 }
 .rxn.mine b { color: var(--msg-accent-text); }
-.rxn.mine:hover { background: color-mix(in srgb, var(--c-accent) 18%, transparent); }
+/* A second coat of the same quiet accent - deeper, still the same hue. */
+.rxn.mine:hover {
+  background-image: linear-gradient(var(--c-accent-quiet), var(--c-accent-quiet));
+}
 
 /* The + affordance stays quiet until the row is engaged. */
 .rxn-add {
@@ -555,7 +564,9 @@
   background: var(--c-accent-quiet);
   border-color: color-mix(in srgb, var(--c-accent) 35%, transparent);
 }
-.threadind:active { background: color-mix(in srgb, var(--c-accent) 18%, transparent); }
+.threadind:active {
+  background-image: linear-gradient(var(--c-accent-quiet), var(--c-accent-quiet));
+}
 
 .th-dot {
   width: 7px;
@@ -608,10 +619,14 @@
 /* The panel is narrow; claw back the channel's generous side padding. */
 .thread-msgs .msg { padding-inline: var(--s-4); }
 
+/* The message the thread hangs off. --c-surface-2 alone is only a few percent
+   away from the panel behind it, so the card also takes a hairline: this row is
+   context, not another reply, and that has to be unmistakable. */
 .thread-root {
+  padding: var(--s-4);
+  border: 1px solid var(--c-border);
   border-radius: var(--r-lg);
   background: var(--c-surface-2);
-  padding: var(--s-4);
 }
 .thread-root:hover { background: var(--c-surface-3); }
 
@@ -654,7 +669,8 @@
   resize: none;
   outline: none;
 }
-.thread-composer textarea::placeholder { color: var(--c-text-2); }
+/* Same as the main composer: the surface carries the focus ring, not the field. */
+.thread-composer textarea:focus { box-shadow: none; }
 
 .thread-composer-row {
   display: flex;
@@ -1038,7 +1054,11 @@
   resize: none;
   outline: none;
 }
-.crow textarea::placeholder { color: var(--c-text-2); }
+/* components.css gives every field its own accent border and 3px halo on focus.
+   Correct for a standalone input, wrong here: the .crow surface already IS the
+   field, so that halo draws a second box inside the first. The surface keeps the
+   focus indication; only the inner ring goes. */
+.crow textarea:focus { box-shadow: none; }
 .crow textarea:disabled {
   color: var(--c-text-2);
   cursor: not-allowed;
@@ -1064,13 +1084,11 @@
   flex: none;
 }
 
-.crow .send {
-  color: var(--msg-accent-text);
-  font-size: var(--t-md);
-}
-.crow .send:hover { background: var(--c-accent-quiet); }
-/* Once there is something to send, the button commits to being a send button.
-   :placeholder-shown is the only signal available without touching the JS. */
+/* The send arrow's resting look is components.css's (button.icon.send). The one
+   thing added here is the commitment: once there is something to send, the
+   button stops being a quiet glyph and becomes a filled button.
+   :placeholder-shown is the only signal for "has text" available without
+   touching the JS. */
 .crow:has(#composer:not(:disabled):not(:placeholder-shown)) .send {
   background: var(--c-accent);
   color: var(--c-accent-text);
@@ -1154,7 +1172,10 @@
   justify-content: center;
   border: 2px dashed var(--c-accent);
   border-radius: var(--r-xl);
-  background: color-mix(in srgb, var(--c-bg) 86%, transparent);
+  /* Near-opaque via opacity rather than a translucent fill, so the element keeps
+     a real background-color - the label has to stay measurable against it. */
+  background: var(--c-bg);
+  opacity: 0.97;
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   color: var(--msg-accent-text);
@@ -1266,6 +1287,29 @@
   .thread-msgs .msg { padding-inline: var(--s-3); }
   .thread-composer-row { flex-wrap: wrap; }
   .alsosend { flex: 1 1 auto; }
+
+  /* A text field plus six 44px targets does not fit across a phone: the field
+     collapses to about 12px and the placeholder renders one letter per line.
+     So the composer stacks the way Slack's phone composer does - the field
+     takes a full-width line of its own, the tools sit underneath it. */
+  .crow {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: var(--s-1);
+  }
+  .crow textarea {
+    order: -1;
+    flex: 1 0 100%;
+    padding-inline: var(--s-3);
+  }
+  .crow .send { margin-left: auto; }
+  /* Feature modules can register more composer tools than the row can hold;
+     let them scroll rather than push the send button off the edge. */
+  .ctools {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+  }
 }
 
 /* ============================================================================
@@ -1323,7 +1367,7 @@
     content: "";
     float: right;
     width: 128px;
-    height: 40px;
+    height: 44px;
   }
 
   /* Reactions keep their compact look but gain a 44px tall hit area from a
@@ -1356,7 +1400,7 @@
   .ac-row { min-height: 44px; }
   .att-file { min-height: 48px; }
 
-  /* Nothing is hover-revealed here, so the grouped-row time would otherwise
-     never be visible at all. */
-  .ghost-time { opacity: 1; }
+  /* The grouped-row time stays hidden on touch. It cannot be revealed by hover
+     and a full "05:57 PM" wraps to two lines inside a 40px gutter, which breaks
+     the tight grouped rhythm for a value the group's first row already shows. */
 }

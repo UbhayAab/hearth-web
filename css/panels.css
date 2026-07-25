@@ -9,8 +9,8 @@
 
    Two NGOs administer real people through these screens, so the bias
    throughout is: dense enough to scan a hundred rows, loose enough to read
-   one. Destructive actions get a moat of whitespace and a solid fill; safe
-   ones stay quiet.
+   one. Destructive actions get a moat of whitespace and a red outline that
+   fills in on hover; safe ones stay quiet.
    ========================================================================= */
 
 /* ---------------------------------------------------------------------------
@@ -61,17 +61,14 @@
    1. PANEL BODY RHYTHM
    ========================================================================= */
 
-/* layout.css may also match this element as `aside#panel .content`, which
-   carries an id of its own. The extra id here keeps the body rhythm with the
-   file that owns the body. */
-#panel #panelContent {
-  padding: var(--s-5) var(--s-5) var(--s-10);
-  min-width: 0;
-  /* Nothing inside a panel may widen the page - long words, tables and code
-     scroll inside their own container instead. */
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-}
+/* The padding, the scrolling and the background of this element are set by
+   layout.css as `aside#panel > .content`, because they belong to the shell and
+   change when the panel becomes a full-screen sheet. Everything from here down
+   is what gets painted inside it.
+
+   min-width:0 is the one structural thing this file needs: without it a wide
+   admin table would refuse to shrink and push the sheet sideways on a phone. */
+#panelContent { min-width: 0; }
 
 /* Search fields that a panel drops in as its own first child. */
 #panelContent > input,
@@ -218,47 +215,11 @@ body .admin-tabbody > h4.sec:first-child {
   font-weight: var(--t-normal);
 }
 
-/* Presence dots. components.css owns the global .dot; these scoped rules only
-   guarantee the geometry and the on/off colour inside the surfaces this file
-   is responsible for. */
-.member .dot,
-.profile-card .dot,
-body .admin-table .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--r-full);
-  flex: none;
-  display: inline-block;
-}
-.member .dot.on,
-.profile-card .dot.on,
-body .admin-table .dot.on { background: var(--c-success); }
-.member .dot.off,
-.profile-card .dot.off,
-body .admin-table .dot.off { background: var(--c-text-3); }
+/* The presence dot itself - size, the online halo, the hollow offline ring -
+   is a shared component and belongs to components.css. Nothing to add here. */
 
 /* ============================================================================
-   5. ROLE CHIPS
-   A tiny label that shows up in member rows, the admin table and the profile
-   card. Not claimed by another file at the time of writing; features.css loads
-   after this one and can refine it without a fight.
-   ========================================================================= */
-.rolechip {
-  display: inline-block;
-  margin-left: var(--s-2);
-  padding: 0 var(--s-3);
-  border-radius: var(--r-full);
-  background: var(--c-surface-3);
-  color: var(--c-text-2);
-  font-size: var(--t-2xs);
-  font-weight: var(--t-semibold);
-  line-height: 1.7;
-  white-space: nowrap;
-  vertical-align: baseline;
-}
-
-/* ============================================================================
-   6. PROFILE CARD  (opens in a modal)
+   5. PROFILE CARD  (opens in a modal)
    ========================================================================= */
 .profile-card {
   display: flex;
@@ -328,7 +289,7 @@ body .admin-table .dot.off { background: var(--c-text-3); }
 .pc-actions button.danger { margin-left: var(--s-4); }
 
 /* ============================================================================
-   7. INVITES  (modal, and the admin Invites tab)
+   6. INVITES  (modal, and the admin Invites tab)
    ========================================================================= */
 .invite-box {
   display: flex;
@@ -403,7 +364,7 @@ body .admin-linkrow button { flex: none; }
 }
 
 /* ============================================================================
-   8. SPACE CHOOSER - create vs join
+   7. SPACE CHOOSER - create vs join
    Two big cards. These are <button> elements, so the rules here have to out-
    rank the generic button styling in components.css; a class beats a type.
    ========================================================================= */
@@ -470,7 +431,7 @@ body .admin-linkrow button { flex: none; }
 }
 
 /* ============================================================================
-   9. ADMIN CONSOLE
+   8. ADMIN CONSOLE
    Every selector in this section carries `body` so it lands after the runtime
    <style> that admin.js injects. See the shim note at the top of the file.
    ========================================================================= */
@@ -636,7 +597,9 @@ body .admin-acts {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  flex-wrap: wrap;
+  /* Never wrap inside a table cell. Three stacked buttons turn a 44px roster
+     row into a 150px one; the table scrolls sideways instead. */
+  flex-wrap: nowrap;
   gap: var(--s-2);
 }
 /* ------------------------------------------------------------------ destructive rows
@@ -740,7 +703,7 @@ body .admin-form .row.gap {
 body .admin-linkrow { margin-top: var(--s-5); }
 
 /* ============================================================================
-   10. ROLES AND USER GROUPS
+   9. ROLES AND USER GROUPS
    Same `body` prefix rule as the admin console - roles.js injects its own CSS.
    .roles-grid and .roles-pick also render inside a modal, which is why these
    are not scoped to #panelContent.
@@ -890,7 +853,7 @@ body .roles-pick {
 }
 
 /* ============================================================================
-   11. MODERATION
+   10. MODERATION
    ========================================================================= */
 body .mod-sec { margin-bottom: var(--s-9); }
 body .mod-sec:last-child { margin-bottom: 0; }
@@ -1032,7 +995,7 @@ body .mod-note.mod-lock {
 }
 
 /* ============================================================================
-   12. ONBOARDING GATES
+   11. ONBOARDING GATES
    ========================================================================= */
 body .onb-sec { margin-bottom: var(--s-9); }
 body .onb-sec:last-child { margin-bottom: 0; }
@@ -1074,18 +1037,13 @@ body .onb-rr b {
 }
 
 /* ============================================================================
-   13. PHONE
+   12. PHONE
    The panel goes full screen here (layout.css), so the job in this file is to
    keep the dense surfaces usable with a thumb: real tap targets, one column
    where two would crush, tab bars that scroll instead of wrapping, and nothing
    that can push the page sideways.
    ========================================================================= */
 @media (max-width: 860px) {
-  #panel #panelContent {
-    padding: var(--s-5) var(--s-5)
-             calc(var(--s-12) + env(safe-area-inset-bottom));
-  }
-
   /* One column: two 44px checkbox rows side by side at 360px is unreadable. */
   body .roles-grid { grid-template-columns: 1fr; }
 
@@ -1112,7 +1070,7 @@ body .onb-rr b {
 }
 
 /* ============================================================================
-   14. TOUCH
+   13. TOUCH
    Nothing in these panels is revealed by hover - every action button is in the
    DOM from the start - so the only work here is size and press feedback.
    ========================================================================= */

@@ -14,6 +14,7 @@ import { api, table } from '../api.js';
 import { store, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { el, esc } from '../util.js';
+import { icon } from '../icons.js';
 
 const canRoles = () => hasPerm(PERM.MANAGE_ROLES) || store.isAdmin;
 // hasPerm() answers true for any platform admin, which is right for showing UI
@@ -441,7 +442,7 @@ export function register(app) {
 
   ui.addHeaderButton({
     id: 'roles',
-    label: '🛡️',
+    label: icon('members'),
     title: 'Roles and user groups',
     order: 210,
     show: canRoles,

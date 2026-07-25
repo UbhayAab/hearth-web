@@ -1,4 +1,4 @@
-// Hearth service worker.
+// Retry service worker.
 //
 // Rules that matter:
 //  - Never cache Supabase (auth, realtime, RPC, storage). A stale message list or
@@ -7,14 +7,23 @@
 //    posts SKIP_WAITING.
 //  - The esm.sh dependencies are cached so the app opens offline instead of
 //    hanging on a module import.
-const VERSION = 'hearth-v3';
+const VERSION = 'retry-v4';
 const SHELL = VERSION + '-shell';
 const VENDOR = VERSION + '-vendor';
 
 const SHELL_FILES = [
   './',
   './index.html',
-  './styles.css',
+  './css/tokens.css',
+  './css/base.css',
+  './css/components.css',
+  './css/layout.css',
+  './css/messages.css',
+  './css/panels.css',
+  './css/features.css',
+  './css/reading.css',
+  './js/theme.js',
+  './js/icons.js',
   './manifest.webmanifest',
   './js/main.js',
   './js/config.js',
@@ -119,12 +128,12 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data?.json() || {}; } catch { d = { body: e.data?.text() || '' }; }
-  const title = d.title || 'Hearth';
+  const title = d.title || 'Retry';
   e.waitUntil(self.registration.showNotification(title, {
     body: d.body || '',
     icon: './icons/icon-192.png',
     badge: './icons/icon-192.png',
-    tag: d.tag || 'hearth',
+    tag: d.tag || 'retry',
     data: d,
     renotify: true,
   }));

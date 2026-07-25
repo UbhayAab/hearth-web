@@ -7,7 +7,8 @@ export const PUBLISHABLE = 'sb_publishable_5gyvKj8AtZeXGDWVLYg3VA_Uwh4T4RD';
 // the app is never an empty room. Real Spaces are joined via #/join/<token>.
 export const DEMO_TOKEN = 'hearth-demo-open-2026';
 
-export const APP_NAME = 'Hearth';
+export const APP_NAME = 'Retry';
+export const APP_VENDOR = 'Redtree';
 export const VERSION = '0.3.0';
 
 // Permission bitfield, mirrored from the database (private.has_perm).

@@ -9,6 +9,7 @@ import { store, bus, nameOf, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { el, esc, timeOf, dayOf, toLocalInput, fromLocalInput } from '../util.js';
 import { getSub } from '../sb.js';
+import { icon } from '../icons.js';
 
 const STATUSES = [
   { key: 'going', label: 'Going' },
@@ -335,7 +336,7 @@ export function register({ ui }) {
   });
 
   ui.addHeaderButton({
-    id: 'events', label: '📅', title: 'Events', order: 80,
+    id: 'events', label: icon('calendar'), title: 'Events', order: 80,
     onClick: () => ui.openPanel('events'),
   });
 

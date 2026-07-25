@@ -1,0 +1,208 @@
+/* ============================================================================
+   READING COLUMN AND DENSITY
+
+   Loaded after the surface stylesheets, because it corrects two things that
+   cut across all of them and are easier to reason about in one place than
+   scattered through five files.
+
+   1. THE MEASURE. Nothing constrained the conversation, so on a laptop or a
+      large monitor every message ran the full width of the window. Reading it
+      meant tracking your eyes, and often your head, from one edge of the screen
+      to the other. Every serious chat client caps this. The column is centred
+      inside its pane so the app still fills the window while the text does not.
+
+   2. DENSITY. The rows were 4px apart with no distinction between a reply that
+      continues a thought and a new person starting to speak. Everything read as
+      one undifferentiated block. Vertical space is what separates turns of
+      conversation, so consecutive messages stay tight while a change of speaker
+      gets real air.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- the column */
+.msg,
+.daydiv,
+.mx-newdiv,
+#messages > .empty,
+.bmk-bar {
+  width: 100%;
+  max-width: var(--reading-max);
+  margin-inline: auto;
+}
+
+/* The composer has to sit under the same column or the conversation and the
+   place you reply to it are visibly out of alignment. */
+#composerBar > .crow,
+#composerBar > #replyBar,
+#composerBar > #attachChips,
+#typing,
+#dmReceipt {
+  width: 100%;
+  max-width: var(--reading-max);
+  margin-inline: auto;
+}
+
+/* The hover band spans the full pane, which reads as a proper row rather than a
+   floating card, while the CONTENT inside it stays on the measure. */
+#messages { padding-inline: var(--s-6); }
+
+/* ---------------------------------------------------------------- density */
+.msg {
+  /* Was 4px. A conversation needs to breathe between turns. */
+  padding-block: var(--s-3);
+  padding-inline: var(--s-5);
+  border-radius: var(--r-md);
+}
+
+/* A run of messages from one person is one utterance: keep it tight so the run
+   reads as a block, and give the NEXT speaker room. */
+.msg.grouped {
+  padding-block: var(--s-1);
+  margin-top: 0;
+}
+.msg:not(.grouped) {
+  margin-top: var(--s-6);
+}
+.msg:not(.grouped):first-child {
+  margin-top: var(--s-2);
+}
+
+/* Name and timestamp need to sit clearly above the words, not crowd them. */
+.mhead {
+  margin-bottom: var(--s-2);
+  gap: var(--s-3);
+}
+.mhead .who {
+  font-size: var(--t-md);
+  letter-spacing: -0.005em;
+}
+
+/* Body copy at a comfortable reading line height. This is the single most-read
+   text in the product. */
+.msg .body {
+  font-size: var(--t-md);
+  line-height: 1.55;
+}
+.msg .body p + p { margin-top: var(--s-3); }
+.msg .body ul,
+.msg .body ol { margin-block: var(--s-3); padding-left: var(--s-8); }
+.msg .body li + li { margin-top: var(--s-1); }
+.msg .body pre { margin-block: var(--s-4); padding: var(--s-5) var(--s-6); }
+.msg .body blockquote { margin-block: var(--s-3); padding-left: var(--s-5); }
+
+/* Reactions and the thread indicator are separate beats from the message. */
+.rxns:not(:empty) { margin-top: var(--s-3); gap: var(--s-2); }
+.threadind { margin-top: var(--s-3); }
+.atts:not(:empty) { margin-top: var(--s-4); }
+
+/* Day dividers separate days; they should feel like a section break. */
+.daydiv {
+  margin-block: var(--s-8) var(--s-5);
+}
+
+/* ---------------------------------------------------------------- sidebar air */
+#sidebar { padding: var(--s-5) var(--s-4); }
+.chan {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  gap: var(--s-4);
+  min-height: 34px;
+}
+#sidebar h3 {
+  margin: var(--s-7) var(--s-3) var(--s-3);
+  letter-spacing: 0.07em;
+}
+#sidebar h3:first-child { margin-top: var(--s-3); }
+
+/* ---------------------------------------------------------------- header air */
+#topbar { gap: var(--s-4); padding-inline: var(--s-6); }
+.hdr-actions { gap: var(--s-1); }
+
+/* ---------------------------------------------------------------- panels */
+aside#panel .content { padding: var(--s-6); }
+
+/* ----------------------------------------------------------------
+   Very wide screens: the column is already capped, so give the panes
+   themselves a little more room rather than letting the gap grow oddly.
+   ---------------------------------------------------------------- */
+@media (min-width: 1600px) {
+  :root { --sidebar-w: 280px; --panel-w: 440px; }
+}
+
+/* On a phone the measure is the screen, so drop the horizontal padding back
+   down and let every pixel count. */
+@media (max-width: 860px) {
+  #messages { padding-inline: 0; }
+  .msg { padding-inline: var(--s-4); }
+  .msg:not(.grouped) { margin-top: var(--s-5); }
+  #composerBar > .crow { max-width: none; }
+}
+
+/* ============================================================================
+   ICONS
+   The chrome used emoji, which the operating system draws - a flat glyph on
+   Windows, a glossy 3D blob on Android, something else on a Mac. Same button,
+   three different products. These are drawn in the app and inherit currentColor,
+   so they follow the theme and stay crisp at any size.
+   ========================================================================= */
+.ico {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: none;
+  /* Optical centring: the 24px grid has more headroom than sidebearing. */
+  margin: -1px 0 0;
+}
+button .ico { pointer-events: none; }
+
+/* Buttons that pair an icon with a word. */
+button:has(.ico) { display: inline-flex; align-items: center; gap: var(--s-3); }
+button.icon:has(.ico) { justify-content: center; }
+
+/* The header row is icon-only, so give each one a real hit area and a calm
+   resting state that lifts on hover. */
+.hdr-actions button.icon,
+#topbar button.icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  color: var(--c-nav-text);
+}
+.hdr-actions button.icon:hover,
+#topbar button.icon:hover {
+  background: var(--c-nav-hover);
+  color: var(--c-nav-text-active);
+}
+
+/* The message hover bar: quick-react emoji are CONTENT and stay emoji; the
+   action icons beside them are chrome and are drawn. */
+.actions button.icon .ico { width: 17px; height: 17px; }
+.actions button.icon { width: 30px; height: 30px; padding: 0; }
+.actions .quick { font-size: 16px; line-height: 1; }
+
+/* Composer tools */
+#composerBar button.icon { width: 34px; height: 34px; padding: 0; }
+#composerBar button.icon .ico { width: 19px; height: 19px; }
+button.send .ico { width: 20px; height: 20px; }
+
+/* The wordmark on the sign-in card. */
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  padding: 0;
+  background: none;
+}
+.logo-mark { border-radius: var(--r-lg); display: block; }
+.byline {
+  display: block;
+  margin-top: var(--s-3);
+  color: var(--c-text-3);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

@@ -169,18 +169,21 @@ button.icon.send:hover {
 button.icon.send:disabled { color: var(--c-text-2); background: transparent; }
 
 /* ------------------------------------------------------------------ install
-   A tinted call to action rather than a solid green one: --c-success is too
-   light behind white text in every theme to reach AA. The green lives in the
-   fill and the edge; the label stays full-strength text so it always reads. */
+   A tinted call to action rather than a solid one, because "install the app" is
+   an offer and should never outrank the primary button next to it. It stays in
+   the ACCENT family on purpose: layout.css re-skins the one live instance
+   (#topbar #installBtn) as a solid accent chip, and an id beats a class, so a
+   success-green edge here would end up drawn around a blue fill. Same family,
+   either way it lands. */
 button.install {
-  background: var(--c-success-quiet);
-  border-color: color-mix(in srgb, var(--c-success) 42%, transparent);
+  background: var(--c-accent-quiet);
+  border-color: color-mix(in srgb, var(--c-accent) 42%, transparent);
   color: var(--c-text);
   box-shadow: none;
 }
 button.install:hover {
-  background: color-mix(in srgb, var(--c-success) 14%, transparent);
-  border-color: var(--c-success);
+  background: color-mix(in srgb, var(--c-accent) 14%, transparent);
+  border-color: var(--c-accent);
 }
 
 /* Touch: a 32px square is a miss on a phone. Grow the button and hang an
@@ -232,6 +235,11 @@ select {
 textarea {
   resize: vertical;
   line-height: var(--t-body);
+}
+/* The resize grabber cannot be dragged with a finger, so on touch it is just a
+   notch of visual noise in the corner of every textarea. */
+@media (hover: none) {
+  textarea { resize: none; }
 }
 
 input:hover:not(:disabled),
@@ -425,10 +433,23 @@ input[type="radio"] {
   border-bottom: none;
 }
 
+/* The four-layer scroll shadow. The two `local` gradients are painted in the
+   content's own coordinate space, so they scroll away and mask the two `scroll`
+   shadows behind them; the shadow only appears on the edge that still has
+   content past it. On a phone a sheet is often taller than the screen and this
+   is the only thing that says so. Both colours are derived from tokens, so the
+   cover always matches the card it sits on. */
 .modal-body {
   padding: var(--s-7);
   overflow: auto;
   overscroll-behavior: contain;
+  background:
+    linear-gradient(var(--c-overlay) 40%, transparent) top / 100% var(--s-7) no-repeat local,
+    linear-gradient(transparent, var(--c-overlay) 60%) bottom / 100% var(--s-7) no-repeat local,
+    linear-gradient(color-mix(in srgb, var(--c-text) 13%, transparent), transparent)
+      top / 100% var(--s-3) no-repeat scroll,
+    linear-gradient(transparent, color-mix(in srgb, var(--c-text) 13%, transparent))
+      bottom / 100% var(--s-3) no-repeat scroll;
 }
 .modal-body > p { line-height: var(--t-body); }
 .modal-body > p + p { margin-top: var(--s-5); }
@@ -499,11 +520,16 @@ input[type="radio"] {
 .toasts {
   position: fixed;
   left: 50%;
-  bottom: max(var(--s-7), calc(env(safe-area-inset-bottom) + var(--s-5)));
+  /* High enough to clear the composer bar, so an error toast never lands on top
+     of the box you are typing in. */
+  bottom: max(var(--s-12), calc(env(safe-area-inset-bottom) + var(--s-9)));
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* One column width for the whole stack. Shrink-to-fit toasts stack with
+     ragged edges and three differently placed colour bars, which reads as
+     clutter; a single left edge reads as one system speaking. */
+  align-items: stretch;
   gap: var(--s-4);
   width: min(420px, calc(100vw - var(--s-8)));
   transform: translateX(-50%);
@@ -654,6 +680,11 @@ input[type="radio"] {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
+  /* The scrollbar is hidden, so the fade is the only thing telling you there
+     are more categories to the right. A mask reads alpha only, which is why
+     currentColor works here and no colour is being invented. */
+  mask-image: linear-gradient(90deg, currentColor calc(100% - var(--s-7)), transparent);
+  -webkit-mask-image: linear-gradient(90deg, currentColor calc(100% - var(--s-7)), transparent);
 }
 .emoji-tabs::-webkit-scrollbar { display: none; }
 
@@ -669,8 +700,16 @@ input[type="radio"] {
   font-weight: var(--t-semibold);
   box-shadow: none;
 }
-.emoji-tab:hover { background: var(--c-surface-2); color: var(--c-text); }
-.emoji-tab.active { background: var(--c-selected); color: var(--c-text); }
+/* --c-surface-2 is the same value as --c-overlay in the dark theme, so a hover
+   inside a popover has to reach for the surface above it to be seen at all. */
+.emoji-tab:hover { background: var(--c-surface-3); color: var(--c-text); }
+.emoji-tab.active {
+  background: var(--c-selected);
+  color: var(--c-text);
+  /* The ring is what actually reads as "selected"; --c-selected alone is a very
+     quiet tint on a dark overlay. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 50%, transparent);
+}
 
 .emoji-grid {
   display: grid;
@@ -718,6 +757,13 @@ input[type="radio"] {
   }
 }
 
+/* The tab strip is a horizontal scroller, so an oversized ::after hit target
+   would be clipped by its own overflow and could push a phantom scrollbar. The
+   pill itself has to be the target instead. */
+@media (hover: none) {
+  .emoji-tab { min-height: 44px; }
+}
+
 /* ============================================================================
    THEME PICKER
    ========================================================================= */
@@ -749,8 +795,10 @@ input[type="radio"] {
   white-space: normal;
   box-shadow: none;
 }
-.theme-option:hover { background: var(--c-surface-2); }
-.theme-option:active { background: var(--c-surface-3); transform: none; }
+/* Same overlay caveat as the emoji tabs: surface-3 is the first surface that
+   separates from --c-overlay in every theme. */
+.theme-option:hover { background: var(--c-surface-3); }
+.theme-option:active { background: var(--c-selected); transform: none; }
 .theme-option.is-active { background: var(--c-selected); }
 
 /* A miniature of the app: a sidebar band, the conversation area, and the accent
@@ -758,12 +806,17 @@ input[type="radio"] {
 .theme-swatch {
   position: relative;
   display: flex;
+  /* A hairline of the swatch's own background shows between the two bands, so
+     the sidebar still reads as a separate pane in the dark theme, where the two
+     fills are only a few values apart. */
+  gap: 1px;
   flex: none;
   width: 46px;
   height: 32px;
   overflow: hidden;
   border: 1px solid var(--c-border-strong);
   border-radius: var(--r-sm);
+  background: var(--c-border-strong);
 }
 .theme-swatch i { display: block; height: 100%; }
 .theme-swatch i:nth-child(1) { width: 36%; }
@@ -935,10 +988,21 @@ input[type="radio"] {
 }
 
 @media (max-width: 860px) {
+  /* The close button floats over this field (.modal-head:has(strong:empty)) and
+     grows to 40px on touch, so the text has to clear 40px + its 6px offset with
+     something left over - at var(--s-11) the placeholder ended 2px short of the
+     glyph and read as clipped. */
   .switcher input {
     min-height: 56px;
-    padding: var(--s-5) var(--s-11) var(--s-5) var(--s-6);
+    padding: var(--s-5) calc(var(--s-11) + var(--s-4)) var(--s-5) var(--s-5);
+    /* 20px is a desktop-hero size; on a 390px phone it clipped the prompt
+       mid-word. --t-lg matches every other field on the phone and is still
+       above the 16px floor that makes iOS zoom the page on focus. */
+    font-size: var(--t-lg);
   }
+  /* The switcher zeroes .modal-body's padding, so the sheet's own safe-area
+     inset has to be reinstated here or the last row sits under the home bar. */
+  #qsRows { padding-bottom: max(var(--s-3), env(safe-area-inset-bottom)); }
   .qs-row { min-height: 48px; }
   .qs-row .muted { display: none; }
 }
@@ -1160,7 +1224,10 @@ button.chip.on {
 }
 
 /* ------------------------------------------------------------------ tabs
-   Generic segmented control: a track with one raised, selected segment. */
+   Generic segmented control: a track with one selected segment. Nothing in the
+   app reaches for it yet - the panels grow their own (.admin-tabs, .hstatus-seg)
+   - so treat it as the vocabulary those should converge on rather than as live
+   code. */
 .tabs {
   display: inline-flex;
   gap: var(--s-1);
@@ -1180,12 +1247,21 @@ button.chip.on {
   box-shadow: none;
 }
 .tabs > button:hover { background: var(--c-surface-3); color: var(--c-text); }
+/* --c-selected, not --c-bg. The raised-white-chip idiom only works on a light
+   theme: in dark, --c-bg is the DARKEST surface in the palette, so a --c-bg
+   segment on a --c-surface-2 track reads as a hole punched in the control
+   rather than a chip lifted out of it. A tint reads as "selected" whichever
+   way the theme runs, and it is the same signal .emoji-tab.active already
+   uses, so the two segmented controls in this file speak with one voice. */
 .tabs > button.on {
   border-color: transparent;
-  background: var(--c-bg);
+  background: var(--c-selected);
   color: var(--c-text);
-  box-shadow: var(--e-1);
+  box-shadow:
+    var(--e-1),
+    inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 40%, transparent);
 }
 @media (hover: none) {
-  .tabs > button { min-height: 40px; }
+  .tabs { padding: var(--s-2); }
+  .tabs > button { min-height: 44px; }
 }
