@@ -42,7 +42,11 @@ export const api = {
     p_pronouns: p.pronouns ?? null, p_status_text: p.status_text ?? null,
     p_status_emoji: p.status_emoji ?? null, p_timezone: p.timezone ?? 'Asia/Kolkata',
   }),
-  heartbeat: (status = 'online') => rpc('heartbeat', { p_status: status }),
+  // The optional channel is the viewer census that feeds channels.viewer_count
+  // and therefore the digest safety valve (0056). It rides on the liveness beat
+  // so it costs no extra request. Null means "I am not looking at a channel".
+  heartbeat: (status = 'online', channel = null) =>
+    rpc('heartbeat', { p_status: status, p_channel: channel }),
   setStatus: (text, emoji, expiresAt = null) =>
     rpc('set_status', { p_text: text, p_emoji: emoji, p_expires_at: expiresAt }),
   clearStatus: () => rpc('clear_status', {}),
@@ -128,6 +132,12 @@ export const api = {
     rpc('mark_unread', { p_scope_type: scopeType, p_scope_id: scopeId, p_from_seq: fromSeq }),
   unread: (ws) => rpc('get_unread', { p_workspace: ws }),
   sync: (cursors) => rpc('sync', { p_cursors: cursors }),
+  // RESUME: one channel, everything past `seq`, plus the retention floor and
+  // whether more was withheld. sync() above cannot express either.
+  resume: (ch, seq, limit = 200) =>
+    rpc('resume', { p_channel: ch, p_seq: seq, p_limit: limit }),
+  resumeDM: (conv, seq, limit = 200) =>
+    rpc('resume_dm', { p_conversation: conv, p_seq: seq, p_limit: limit }),
   schedule: (ch, text, deliverAt, mentions = []) =>
     rpc('schedule_message', { p_channel: ch, p_body_text: text, p_deliver_at: deliverAt, p_mentions: mentions }),
   listScheduled: (ws) => rpc('list_scheduled', { p_workspace: ws }),

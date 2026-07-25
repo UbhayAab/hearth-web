@@ -288,9 +288,13 @@ function builderRow(i, seed = {}) {
   type.onchange = syncOpts;
   syncOpts();
   row.querySelector('.' + CLS + '-bdel').onclick = () => {
-    if (row.parentElement.children.length <= 1) { toastFn?.('A form needs at least one question', 'error'); return; }
+    // Capture the host BEFORE removing: afterwards row.parentElement is null, so
+    // the renumber silently ran over an empty list and question 3 stayed "3" once
+    // question 2 was gone.
+    const host = row.parentElement;
+    if (!host || host.children.length <= 1) { toastFn?.('A form needs at least one question', 'error'); return; }
     row.remove();
-    [...row.parentElement?.children || []].forEach((n, k) => { n.querySelector('.' + CLS + '-bnum').textContent = k + 1; });
+    [...host.children].forEach((n, k) => { n.querySelector('.' + CLS + '-bnum').textContent = k + 1; });
   };
   return row;
 }
@@ -452,24 +456,41 @@ function style() {
 .${CLS}-card.${CLS}-closed{opacity:.92}
 .${CLS}-head{display:flex;align-items:flex-start;gap:var(--s-4)}
 .${CLS}-title{flex:1;font-weight:var(--t-bold);word-break:break-word}
+/* Tint for the signal, --c-text for the label: --c-accent on --c-accent-quiet is
+   3.72:1 in light and 4.08:1 in dark, both under AA at 10.5px. */
 .${CLS}-tag{flex:none;font-size:var(--t-2xs);font-weight:var(--t-black);letter-spacing:.5px;
   padding:var(--s-1) var(--s-3);border-radius:var(--r-xs);
-  background:var(--c-accent-quiet);color:var(--c-accent)}
-.${CLS}-closed .${CLS}-tag{background:var(--c-surface-3);color:var(--c-text-3)}
+  background:var(--c-accent-quiet);color:var(--c-text)}
+.${CLS}-closed .${CLS}-tag{background:var(--c-surface-3);color:var(--c-text-2)}
 .${CLS}-desc{color:var(--c-text-2);font-size:var(--t-sm);margin-top:var(--s-2)}
-.${CLS}-qs{color:var(--c-text-3);font-size:var(--t-xs);margin:var(--s-3) 0 var(--s-4)}
+.${CLS}-qs{color:var(--c-text-2);font-size:var(--t-xs);margin:var(--s-3) 0 var(--s-4)}
 .${CLS}-foot{flex-wrap:wrap;align-items:center;gap:var(--s-3)}
+/* --c-text-inverse, not --c-accent-text: the latter is white in every theme and
+   lands at 3.16:1 on the dark accent. */
 .${CLS}-fill{min-height:36px;padding:var(--s-3) var(--s-6);border-radius:var(--r-md);border:0;
-  font-weight:var(--t-semibold);background:var(--c-accent);color:var(--c-accent-text)}
+  font-weight:var(--t-semibold);background:var(--c-accent);color:var(--c-text-inverse)}
+/* polish.css section 16 carries
+     :root[data-theme="light"] .frm-fill { color: color-mix(in srgb, var(--c-accent) 88%, black) }
+   which reads .frm-fill as accent-coloured TEXT. It is a filled accent BUTTON, so
+   that rule paints dark blue on blue: measured 1.23:1 (light) and 1.20:1
+   (colorful), i.e. the primary call to action on a form is unreadable in the two
+   themes most likely to be used outdoors. That file belongs to another agent and
+   is loaded LAST (it is appended to <head> after every feature <style>), so equal
+   specificity loses on order - hence the element selector, which takes this to
+   (0,3,1) and wins without !important. The rule there should be deleted.
+   .ackl-confirm is built identically and has no such override, which is what made
+   the two buttons disagree. */
+:root[data-theme="light"] button.${CLS}-fill,
+:root[data-theme="colorful"] button.${CLS}-fill{color:var(--c-text-inverse)}
 .${CLS}-done{display:inline-flex;align-items:center;gap:var(--s-2);
-  color:var(--c-success);font-size:var(--t-sm);font-weight:var(--t-semibold)}
-.${CLS}-done svg{width:15px;height:15px}
+  color:var(--c-text-2);font-size:var(--t-sm);font-weight:var(--t-semibold)}
+.${CLS}-done svg{width:15px;height:15px;color:var(--c-success)}
 .${CLS}-err{color:var(--c-danger);font-size:var(--t-sm)}
 
 .${CLS}-resp{margin-bottom:var(--s-3)}
 .${CLS}-respwho{display:flex;gap:var(--s-3);align-items:baseline;margin-bottom:var(--s-3)}
 .${CLS}-pair{display:flex;gap:var(--s-4);padding:var(--s-2) 0;border-top:1px solid var(--c-border-subtle)}
-.${CLS}-k{flex:0 0 40%;color:var(--c-text-3);font-size:var(--t-sm)}
+.${CLS}-k{flex:0 0 40%;color:var(--c-text-2);font-size:var(--t-sm)}
 .${CLS}-v{flex:1;word-break:break-word;font-size:var(--t-sm)}
 
 .${CLS}-row{cursor:pointer}
@@ -477,8 +498,8 @@ function style() {
   font-size:var(--t-xs);margin-top:var(--s-2)}
 .${CLS}-pill{font-size:var(--t-2xs);font-weight:var(--t-black);letter-spacing:.4px;
   padding:var(--s-0) var(--s-3);border-radius:var(--r-xs);
-  background:var(--c-surface-3);color:var(--c-text-3)}
-.${CLS}-pill.open{background:var(--c-success-quiet);color:var(--c-success)}
+  background:var(--c-surface-3);color:var(--c-text-2)}
+.${CLS}-pill.open{background:var(--c-success-quiet);color:var(--c-text)}
 
 .${CLS}-builder .${CLS}-rows{display:flex;flex-direction:column;gap:var(--s-3)}
 .${CLS}-brow{display:grid;gap:var(--s-3);align-items:center;
@@ -508,6 +529,7 @@ export function register({ ui }) {
 
   bus.on('message:render', ({ msg, el: row }) => mount(msg, row));
   bus.on('channel:open', scheduleBind);
+  bus.on('channel:subscribed', scheduleBind);
   scheduleBind();
 
   ui.registerPanel({ id: 'forms', title: 'Forms', render: renderList });

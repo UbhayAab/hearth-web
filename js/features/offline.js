@@ -33,7 +33,9 @@ import { icon } from '../icons.js';
 import { SUPABASE_URL, PUBLISHABLE } from '../config.js';
 import { sb, accessToken } from '../sb.js';
 import { appendMessage, upgradeMessageRow, scrollDown } from '../core/messages.js';
+import { threadState } from '../core/threads.js';
 import * as outbox from '../lib/outbox.js';
+import * as readcache from '../lib/readcache.js';
 
 // A radio that is attached but not moving data is the common 3G failure, and a
 // fetch against it never settles. Fifteen seconds is long enough for a slow but
@@ -42,12 +44,45 @@ const SEND_TIMEOUT_MS = 15000;
 // Doubling with a ceiling. The ceiling is deliberately low - two minutes - so a
 // phone that regains signal in a village is never more than that from flushing.
 const BACKOFF_MS = [2000, 5000, 12000, 30000, 60000, 120000];
+// Do not decorate a send that is going to land in 300 ms. A clock followed by a
+// tick on every single message is two layout shifts per message and a column of
+// green ticks down a phone screen, which is noise, not reassurance - the message
+// appearing in the conversation already says it arrived. The state only shows up
+// once the send is actually slow, queued, or refused, which is exactly when a
+// person starts wondering whether it went.
+const SLOW_PAINT_MS = 900;
 // 401 is in here on purpose. It usually means the access token expired while the
 // phone was in a pocket, and the refresh has not landed yet. Retrying is right;
 // discarding somebody's message because a JWT aged out is not.
 const RETRY_STATUS = new Set([401, 408, 425, 429, 500, 502, 503, 504, 522, 524]);
 const SEND_RPC = /\/rest\/v1\/rpc\/(send_message|send_dm)(\?|$)/;
 const DRAFT_KEY = 'soop.drafts.v1';
+
+// The reads that decide whether the app can open at all. get_bootstrap is the
+// whole workspace in one blob, the workspaces table is the Space rail, and
+// get_channel_messages is the conversation itself. Remember the last answer to
+// each and a cold start with no signal shows the Space you are in instead of
+// telling you that you are in none. Deliberately short: nothing here is a write,
+// nothing here is search, and nothing here is a live counter that would be
+// misleading when stale.
+const CACHEABLE = [
+  /\/rest\/v1\/rpc\/get_bootstrap(\?|$)/,
+  /\/rest\/v1\/rpc\/get_channel_messages(\?|$)/,
+  /\/rest\/v1\/rpc\/get_space_summary(\?|$)/,
+  /\/rest\/v1\/workspaces(\?|$)/,
+  /\/rest\/v1\/threads(\?|$)/,
+  /\/rest\/v1\/profiles(\?|$)/,
+  // Not boot-critical, but both of these paint an error string into the
+  // conversation view and into the channel nav when they fail. Serving the last
+  // answer keeps a screen that is otherwise fully readable from being littered
+  // with apologies.
+  /\/rest\/v1\/rpc\/list_topics(\?|$)/,
+  /\/rest\/v1\/rpc\/list_bookmarks(\?|$)/,
+];
+const isCacheable = (url) => CACHEABLE.some((re) => re.test(url));
+// The three reads that decide whether there is an app at all: the Space list,
+// the workspace blob, and my own profile.
+const BOOT_CRITICAL = /\/rest\/v1\/(workspaces|profiles)(\?|$)|\/rpc\/get_bootstrap(\?|$)/;
 
 let ui = null;
 let rawFetch = null;
@@ -60,6 +95,7 @@ let flushing = false;
 let netFails = 0;              // consecutive network failures on any request
 let recovered = 0;             // timestamp of the last offline -> online flip
 let tickTimer = null;
+let servedAt = 0;              // when the stale data now on screen was recorded
 
 // ------------------------------------------------------------------ register
 export function register(app) {
@@ -83,24 +119,34 @@ export function register(app) {
   window.addEventListener('online', () => {
     netFails = 0;
     recovered = Date.now();
+    // Whatever is on screen is about to be refreshed from the server, so stop
+    // claiming it is from 14:30.
+    servedAt = 0;
     paintBar();
     flush('online');
   });
   window.addEventListener('offline', () => { paintBar(); repaintAllRows(); });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') flush('visible');
+    if (document.visibilityState === 'visible') { ensureQueuedRows(); flush('visible'); }
   });
 
   bus.on('channel:open', () => ensureQueuedRows());
   bus.on('dm:open', () => ensureQueuedRows());
-  bus.on('message:new', () => ensureQueuedRows());
+  bus.on('message:new', (p) => { ensureQueuedRows(); patchCachedPage(p?.msg); });
+  bus.on('thread:open', () => ensureQueuedRows());
   watchMessageList();
+  guardCoreRetry();
 
   // One slow loop rather than a per-record timer: a queued message must move the
   // moment the radio comes back, but an empty queue must cost nothing.
+  //
+  // Skipped entirely while the tab is hidden. A phone in a pocket has no reason
+  // to wake its radio every five seconds, and `visibilitychange` above already
+  // flushes the moment the person looks at it again.
   tickTimer = setInterval(() => {
-    if (!live.size) return;
+    if (!live.size || document.hidden) return;
     paintBar();
+    ensureQueuedRows();
     flush('tick');
   }, 5000);
 
@@ -128,26 +174,37 @@ const STYLE = `
 .ob-spin{display:inline-block;animation:ob-turn 1.6s linear infinite}
 @keyframes ob-turn{to{transform:rotate(360deg)}}
 
-#obBar{position:fixed;left:50%;transform:translateX(-50%) translateY(-8px);
-  top:calc(var(--header-h,44px) + var(--channelbar-h,49px) + env(safe-area-inset-top) + var(--s-3));
-  z-index:var(--z-toast);display:flex;align-items:center;gap:var(--s-3);
-  max-width:min(92vw,560px);padding:var(--s-3) var(--s-5);border-radius:var(--r-full);
-  background:var(--c-overlay);color:var(--c-text);border:1px solid var(--c-border-strong);
-  box-shadow:var(--e-3);font-size:var(--t-sm);font-weight:var(--t-medium);
-  opacity:0;pointer-events:none;transition:opacity var(--m-base) var(--m-ease),
-  transform var(--m-base) var(--m-ease)}
-#obBar.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+/* A BAND above the message list, not a floating pill.
+   It used to be a fixed, centred pill, and two things were wrong with that. A
+   fixed box positioned with left:50% only gets HALF the viewport as its
+   available width, so on a 390px phone it was squeezed to 195px and wrapped onto
+   three lines while its own max-width said 94vw. And being offline is not a
+   passing toast - it lasts as long as the walk out of the valley does - so an
+   overlay parked over the conversation permanently hides whatever is behind it,
+   at every scroll position. As a flow child of section.msgs it pushes the list
+   down instead: it covers nothing, needs no measuring, and reads as a state the
+   app is in rather than as a notification that will go away. */
+#obBar{display:none;align-items:center;gap:var(--s-3);
+  padding:var(--s-3) var(--s-5);
+  border-block-end:1px solid var(--c-border-subtle);
+  background:var(--c-bg-2);color:var(--c-text);
+  font-size:var(--t-sm);font-weight:var(--t-medium);line-height:1.35}
+#obBar.on{display:flex}
 #obBar .ico{width:15px;height:15px;flex:none}
 #obBar .ob-txt{min-width:0}
-#obBar.ob-down{border-color:var(--c-danger);color:var(--c-danger)}
-#obBar.ob-wait{border-color:var(--c-warn);color:var(--c-warn)}
-#obBar.ob-up{border-color:var(--c-success);color:var(--c-success)}
+#obBar.ob-down{background:var(--c-danger-quiet);color:var(--c-danger);
+  border-block-end-color:var(--c-danger)}
+#obBar.ob-wait{background:var(--c-warn-quiet);color:var(--c-warn);
+  border-block-end-color:var(--c-warn)}
+#obBar.ob-up{background:var(--c-success-quiet);color:var(--c-success);
+  border-block-end-color:var(--c-success)}
+/* Only if section.msgs was not there to host it. */
+body > #obBar.on{position:fixed;left:0;right:0;
+  top:calc(var(--header-h,44px) + var(--channelbar-h,49px) + env(safe-area-inset-top));
+  z-index:var(--z-toast)}
 @media (max-width:860px){
-  /* A pill radius on a three-line strip reads as a speech bubble, not a status
-     bar. Square it off once the text has to wrap. */
-  #obBar{max-width:94vw;font-size:var(--t-xs);padding:var(--s-3) var(--s-4);
-    border-radius:var(--r-lg);align-items:flex-start}
-  #obBar .ico{margin-top:1px}
+  #obBar{font-size:var(--t-xs);padding:var(--s-3) var(--s-4);align-items:flex-start}
+  #obBar .ico{margin-top:2px}
 }
 .ob-row{display:flex;gap:var(--s-4);align-items:flex-start;padding:var(--s-4) 0;
   border-bottom:1px solid var(--c-border-subtle)}
@@ -239,18 +296,102 @@ async function restGuard(input, init, next) {
 // Offline: answer instantly rather than let a doomed request sit on the radio
 // for thirty seconds. Everything downstream already handles a throw, and this
 // way the words it shows a volunteer are ours, not the browser's.
+//
+// Before throwing, though, look on disk. For the handful of reads that decide
+// what the app can show, last night's answer is enormously better than none: it
+// is the difference between "here is your Space, from 14:30" and "you are not in
+// a Space yet".
 async function passThrough(input, init, next, url) {
-  if (!navigator.onLine) throw noConnectionError();
+  const method = String(init?.method || input?.method || 'GET').toUpperCase();
+  const body = typeof init?.body === 'string' ? init.body : '';
+
+  if (!navigator.onLine) {
+    const hit = await cachedAnswer(method, url, body);
+    if (hit) return hit;
+    throw noConnectionError();
+  }
   try {
     const res = await next(input, init);
     noteHealthy();
-    if (res.ok) noteDraftSaved(url);
+    if (res.ok) { noteDraftSaved(url); rememberAnswer(method, url, body, res); }
     return res;
   } catch (e) {
     if (e?.obHandled) throw e;
     noteFailure();
+    const hit = await cachedAnswer(method, url, body);
+    if (hit) return hit;
     throw noConnectionError();
   }
+}
+
+// Fire and forget: a cache write must never be on the critical path of a read
+// that already succeeded.
+function rememberAnswer(method, url, body, res) {
+  if (!isCacheable(url)) return;
+  const key = readcache.keyFor(store.me, method, url, body);
+  // Remember which key holds the FIRST page of each channel, so messages that
+  // arrive afterwards can be folded into it. Without this the cached copy is
+  // frozen at the moment the channel was opened, and everything said since -
+  // usually the part that mattered - is missing when the app reopens offline.
+  if (/get_channel_messages/.test(url)) {
+    try {
+      const b = JSON.parse(body || '{}');
+      if (b.p_channel && !b.p_before_seq) pageKeys.set(b.p_channel, key);
+    } catch { /* not a shape we can index */ }
+  }
+  res.clone().text().then((text) => readcache.write(key, {
+    body: text,
+    ct: res.headers.get('content-type') || 'application/json',
+    // Without these three the app cannot open at all, so they outlive any
+    // number of channel pages when the cache has to make room.
+    keep: BOOT_CRITICAL.test(url),
+  })).catch(() => { /* the live response is unaffected */ });
+}
+
+// ---- keeping the cached page current
+const pageKeys = new Map();          // channel_id -> readcache key of page 1
+const pendingPatch = new Map();      // channel_id -> [msg]
+
+function patchCachedPage(msg) {
+  if (!msg?.id || !msg.channel_id || !pageKeys.has(msg.channel_id)) return;
+  if (!pendingPatch.has(msg.channel_id)) pendingPatch.set(msg.channel_id, []);
+  pendingPatch.get(msg.channel_id).push(msg);
+  flushPatches();
+}
+
+// Coalesced: a busy channel must not turn every arriving message into an
+// IndexedDB round trip.
+const flushPatches = debounce(async () => {
+  const work = [...pendingPatch.entries()];
+  pendingPatch.clear();
+  for (const [channelId, msgs] of work) {
+    const key = pageKeys.get(channelId);
+    if (!key) continue;
+    try {
+      const rec = await readcache.read(key);
+      if (!rec) continue;
+      const rows = JSON.parse(rec.body);
+      if (!Array.isArray(rows)) continue;
+      const have = new Set(rows.map((r) => r.id));
+      // The RPC returns newest first; that is the order the reader reverses.
+      for (const m of msgs) if (!have.has(m.id)) { rows.unshift(m); have.add(m.id); }
+      await readcache.write(key, { body: JSON.stringify(rows.slice(0, 60)), ct: rec.ct });
+    } catch { /* a cache we cannot patch is still a cache */ }
+  }
+}, 1500);
+
+async function cachedAnswer(method, url, body) {
+  if (!isCacheable(url)) return null;
+  const rec = await readcache.read(readcache.keyFor(store.me, method, url, body));
+  if (!rec) return null;
+  // Remember the oldest thing on screen, not the newest: the bar must not claim
+  // the view is fresher than its stalest part.
+  servedAt = servedAt ? Math.min(servedAt, rec.at) : rec.at;
+  paintBar();
+  return new Response(rec.body, {
+    status: 200,
+    headers: { 'Content-Type': rec.ct || 'application/json' },
+  });
 }
 
 // postgrest renders a failed fetch as `${err.name}: ${err.message}`, which is
@@ -258,7 +399,10 @@ async function passThrough(input, init, next, url) {
 // channel lists. Both halves are ours, so the sentence it composes is readable
 // wherever core prints e.message raw.
 function noConnectionError() {
-  const e = new TypeError('this needs the internet. It will load when you are back online.');
+  // Both halves are deliberately written to read as ONE sentence once postgrest
+  // has joined them, because several features print the joined string straight
+  // into the page: "No connection: this will load when you are back online."
+  const e = new TypeError('this will load when you are back online.');
   e.name = 'No connection';
   e.obHandled = true;
   return e;
@@ -282,6 +426,7 @@ async function guardedSend(url, init, next) {
     text: body.p_body_text || '',
     attachments: Array.isArray(body.p_attachments) ? body.p_attachments : [],
     reply_to: body.p_reply_to || null,
+    also_send: !!body.p_also_send,
     created_at: prior?.created_at || Date.now(),
     attempts: prior?.attempts || 0,
     next_at: 0,
@@ -292,13 +437,22 @@ async function guardedSend(url, init, next) {
   // is still here on the next launch, and replaying it is safe.
   await save(rec);
   snapshotDrafts();
-  markRow(nonce);
+  // A thread reply is the one send path with no optimistic row of its own: the
+  // thread composer waits for the server and, on failure, puts the text BACK in
+  // the textarea. Queued, that is a trap - the reply is on disk and will send,
+  // but the person sees only their own text sitting there unsent, so they press
+  // Reply again and the server gets two of them under two different nonces.
+  // Clear the box and paint the reply into the thread like any other message.
+  if (rec.thread_id) clearThreadComposerSoon(rec.text);
+  ensureQueuedRows();
 
   if (!navigator.onLine) {
     await queueFor(rec, 0);
     throw offlineError();
   }
 
+  // Only decorate the row if the send is still in flight after SLOW_PAINT_MS.
+  const slowPaint = setTimeout(() => markRow(nonce), SLOW_PAINT_MS);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), SEND_TIMEOUT_MS);
   let res;
@@ -306,11 +460,13 @@ async function guardedSend(url, init, next) {
     res = await next(url, { ...init, signal: init.signal || ctrl.signal });
   } catch (e) {
     clearTimeout(timer);
+    clearTimeout(slowPaint);
     noteFailure();
     await queueFor(rec, 1);
     throw offlineError();
   }
   clearTimeout(timer);
+  clearTimeout(slowPaint);
 
   if (res.ok) {
     noteHealthy();
@@ -318,7 +474,12 @@ async function guardedSend(url, init, next) {
     let landedId = null;
     try {
       const j = await res.clone().json();
-      landedId = (Array.isArray(j) ? j[0] : j)?.id || null;
+      const row = Array.isArray(j) ? j[0] : j;
+      landedId = row?.id || null;
+      // My own message never comes back as a broadcast - the client dedupes its
+      // own echo - so it has to be folded into the cached page from here or the
+      // last thing I said is missing when the app reopens with no signal.
+      patchCachedPage(row);
     } catch { /* the caller still gets the real response */ }
     // The composer re-points its optimistic row on the same turn; wait one
     // macrotask so the tick lands on the finished row rather than a stale id.
@@ -425,6 +586,7 @@ async function attempt(rec) {
     } catch { /* it landed; we just cannot decorate it */ }
     await drop(rec.nonce);
     landed(rec, row);
+    patchCachedPage(row);
     return;
   }
 
@@ -441,35 +603,66 @@ async function attempt(rec) {
 // real id so reactions, threads and every action work on it, exactly as a
 // first-try send would have.
 function landed(rec, row) {
-  const node = rowFor(rec.nonce);
+  // An also-send thread reply is on screen TWICE, in the panel and in the
+  // channel. Both copies have to become the real message or one of them is left
+  // as a husk with no id, where reactions and replies quietly do nothing.
+  const nodes = rowsFor(rec.nonce);
   if (row?.id) {
     store.seen.add(row.id);
     store.seen.add('n:' + rec.nonce);
     if (row.seq && rec.kind === 'channel' && store.current?.id === rec.scope_id) {
       store.cursor = Math.max(store.cursor, row.seq);
     }
-    if (node) {
+    for (const node of nodes) {
+      // The realtime echo can beat this response back. A thread reply reaches the
+      // panel through `message:new`, which gates on the REAL id - an id our row
+      // does not carry until the line below - so if the broadcast already painted
+      // it, upgrading ours would leave the reply on screen twice. Drop the echo
+      // and keep ours: ours is the row the person has been watching, it holds the
+      // delivery state, and it is in the position they last saw it in.
+      const host = node.parentElement;
+      const twin = host?.querySelector(`[data-id="${CSS.escape(row.id)}"]`);
+      if (twin && twin !== node) twin.remove();
       node.classList.remove('ob-queued', 'ob-broke', 'failed', 'pending');
-      upgradeMessageRow(node, row, rec.kind === 'dm' ? 'dm' : 'channel');
+      const ctx = rec.kind === 'dm' ? 'dm' : (node.closest('#threadMsgs') ? 'thread' : 'channel');
+      upgradeMessageRow(node, row, ctx);
       node.dataset.obNonce = rec.nonce;
     }
   }
-  if (node) setState(node, 'sent');
+  for (const node of rowsFor(rec.nonce)) setState(node, 'sent');
   paintBar();
 }
 
+// Only rows that were ALREADY carrying a state get a tick. A message that landed
+// on the first try in under a second was never in doubt, so it gets nothing -
+// see SLOW_PAINT_MS. The flusher calls setState('sent') directly instead,
+// because a message that spent time in the queue has definitely earned it.
 function stampSent(nonce, landedId) {
-  const node = rowFor(nonce) || (landedId ? document.getElementById('m' + landedId) : null);
-  if (!node) return;
-  node.dataset.obNonce = nonce;
-  node.classList.remove('ob-queued', 'ob-broke');
-  setState(node, 'sent');
+  let nodes = rowsFor(nonce);
+  if (!nodes.length && landedId) {
+    const byId = document.getElementById('m' + landedId);
+    nodes = byId ? [byId] : [];
+  }
+  for (const node of nodes) {
+    if (!node.querySelector('.ob-state')) continue;
+    node.dataset.obNonce = nonce;
+    node.classList.remove('ob-queued', 'ob-broke');
+    setState(node, 'sent');
+  }
 }
 
 // ------------------------------------------------------------------ row state
+function rowsFor(nonce) {
+  const tagged = [...document.querySelectorAll(`[data-ob-nonce="${CSS.escape(nonce)}"]`)];
+  if (tagged.length) return tagged;
+  // Before we have tagged it, the composer's optimistic row is keyed by the
+  // nonce it minted.
+  const byId = document.getElementById('m' + nonce);
+  return byId ? [byId] : [];
+}
+
 function rowFor(nonce) {
-  return document.querySelector(`[data-ob-nonce="${CSS.escape(nonce)}"]`)
-    || document.getElementById('m' + nonce);
+  return rowsFor(nonce)[0] || null;
 }
 
 const LABEL = {
@@ -511,6 +704,7 @@ function setState(node, state, rec) {
   strip.innerHTML = `<span class="${spin.trim()}">${glyph}</span><span>${esc(LABEL[state] || state)}${why}</span>`;
 
   if (state === 'failed') {
+    rowExplainedAt = Date.now();
     const again = el('button', 'sm', 'Try again');
     again.onclick = () => retryOne(rec?.nonce || node.dataset.obNonce);
     const bin = el('button', 'sm ghost', 'Delete');
@@ -522,15 +716,24 @@ function setState(node, state, rec) {
     // person has seen it, so retire it quietly.
     setTimeout(() => { if (strip.classList.contains('ob-sent')) strip.remove(); }, 6000);
   }
+  // The strip and its two buttons make the row taller AFTER the send scrolled to
+  // the bottom, so "Not sent - Try again / Delete" ends up under the composer,
+  // which is the one state nobody can afford to miss. Follow it down - but only
+  // if they were already at the bottom, never yanking someone out of history.
+  if (state === 'failed' && node.closest('#messages')) {
+    const list = $('messages');
+    if (list && list.scrollHeight - list.scrollTop - list.clientHeight < 220) scrollDown();
+  }
 }
 
 function markRow(nonce) {
   const rec = live.get(nonce);
-  const node = rowFor(nonce);
-  if (!node || !rec) return;
-  node.dataset.obNonce = nonce;
+  if (!rec) return;
   const state = rec.state === 'queued' && rec.attempts > 0 && navigator.onLine ? 'retrying' : rec.state;
-  setState(node, state, rec);
+  for (const node of rowsFor(nonce)) {
+    node.dataset.obNonce = nonce;
+    setState(node, state, rec);
+  }
 }
 
 // The composer paints its own "failed + Retry" furniture in the catch block that
@@ -568,8 +771,9 @@ async function discardOne(nonce, node) {
     danger: true,
   });
   if (!okGone) return;
+  const nodes = rowsFor(nonce);
   await drop(nonce);
-  (node || rowFor(nonce))?.remove();
+  for (const n of (nodes.length ? nodes : [node].filter(Boolean))) n.remove();
   paintBar();
 }
 
@@ -583,32 +787,93 @@ function currentScope() {
   return null;
 }
 
+// A thread reply is the only send with no optimistic row of core's own: core
+// appends it AFTER the server answers. So while such a send is still in flight
+// and the network is up, painting our own row would leave two of them the moment
+// it succeeds. Wait until it is genuinely waiting - offline, queued, retrying or
+// refused - which is the only case core leaves nothing on screen.
+function needsOurRow(rec) {
+  if (!rec.thread_id) return true;
+  return !(rec.state === 'sending' && navigator.onLine);
+}
+
+function optimisticRow(rec) {
+  return {
+    id: rec.nonce,
+    client_msg_id: rec.nonce,
+    author_id: store.me,
+    body_text: rec.text,
+    attachments: rec.attachments,
+    created_at: new Date(rec.created_at).toISOString(),
+    reply_to_id: rec.reply_to,
+  };
+}
+
 function ensureQueuedRowsNow() {
+  if (!live.size) return;
+  const rows = [...live.values()].sort((a, z) => a.created_at - z.created_at);
   const scope = currentScope();
   const host = $('messages');
-  if (!scope || !host || !live.size) return;
-  const rows = [...live.values()].sort((a, z) => a.created_at - z.created_at);
+  let added = false;
+
+  if (scope && host) {
+    for (const rec of rows) {
+      if (rec.kind !== scope.kind || rec.scope_id !== scope.id) continue;
+      // A thread reply belongs in the panel, not the channel - unless its author
+      // ticked "Also send to #channel", which is the whole point of that tick.
+      if (rec.thread_id && !rec.also_send) continue;
+      if (!needsOurRow(rec)) continue;
+      if (rowFor(rec.nonce)) continue;
+      host.querySelector('.empty')?.remove();
+      store.seen.add('n:' + rec.nonce);
+      const node = appendMessage(host, optimisticRow(rec), scope.kind);
+      node.dataset.obNonce = rec.nonce;
+      markRow(rec.nonce);
+      added = true;
+    }
+    if (added) scrollDown();
+  }
+
+  ensureThreadRows(rows);
+}
+
+// The open thread panel is a second list with its own host, rebuilt from the
+// server whenever it opens. Queued replies have to be put back into it for the
+// same reason they are put back into a channel: a message you cannot see is a
+// message you will write again.
+function ensureThreadRows(rows) {
+  const host = $('threadMsgs');
+  if (!host || !threadState.id) return;
   let added = false;
   for (const rec of rows) {
-    if (rec.kind !== scope.kind || rec.scope_id !== scope.id) continue;
-    if (rec.thread_id) continue;                   // a thread reply is not channel content
-    if (rowFor(rec.nonce)) continue;
-    host.querySelector('.empty')?.remove();
-    store.seen.add('n:' + rec.nonce);
-    const node = appendMessage(host, {
-      id: rec.nonce,
-      client_msg_id: rec.nonce,
-      author_id: store.me,
-      body_text: rec.text,
-      attachments: rec.attachments,
-      created_at: new Date(rec.created_at).toISOString(),
-      reply_to_id: rec.reply_to,
-    }, scope.kind);
+    if (rec.thread_id !== threadState.id) continue;
+    if (!needsOurRow(rec)) continue;
+    if (host.querySelector(`[data-ob-nonce="${CSS.escape(rec.nonce)}"]`)) continue;
+    // The channel copy of an also-send reply carries the same nonce, so look
+    // inside THIS host rather than the whole document.
+    const node = appendMessage(host, optimisticRow(rec), 'thread');
     node.dataset.obNonce = rec.nonce;
-    markRow(rec.nonce);
+    setState(node, rec.state === 'failed' ? 'failed'
+      : (rec.attempts > 0 && navigator.onLine ? 'retrying' : rec.state), rec);
     added = true;
   }
-  if (added) scrollDown();
+  if (added) host.scrollTop = host.scrollHeight;
+}
+
+// Core restores the text into the thread textarea in its own catch block, which
+// runs after we resolve. Clearing once is not enough: the last writer wins and
+// it has to be us.
+function clearThreadComposerSoon(text) {
+  const wipe = () => {
+    const ta = document.getElementById('threadComposer');
+    if (ta && ta.value.trim() === String(text || '').trim()) {
+      ta.value = '';
+      ta.style.height = 'auto';
+    }
+  };
+  wipe();
+  setTimeout(wipe, 0);
+  setTimeout(wipe, 160);
 }
 
 const ensureQueuedRows = debounce(ensureQueuedRowsNow, 180);
@@ -617,6 +882,27 @@ const ensureQueuedRows = debounce(ensureQueuedRowsNow, 180);
 // the list, so a one-shot hook on that event paints into a node that is about to
 // be thrown away. Watching the list itself is the only trigger that survives a
 // slow load, a reconcile and a jump-to-message alike.
+// The composer paints its own "failed + Retry" button into .body and we remove
+// it on the next macrotask - a window of well under a frame, but a real one. A
+// click inside it re-sends with a FRESH nonce, which is the one thing the whole
+// design exists to prevent: the message is already on disk under the old nonce,
+// so the person would get two. Swallow the click at the capture phase instead of
+// racing the DOM, and do our retry rather than core's.
+function guardCoreRetry() {
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest?.('.msg .body > button');
+    if (!btn) return;
+    const row = btn.closest('.msg');
+    const nonce = row?.dataset.obNonce
+      || (row?.id?.startsWith('m') && live.has(row.id.slice(1)) ? row.id.slice(1) : null);
+    if (!nonce || !live.has(nonce)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    btn.remove();
+    retryOne(nonce);
+  }, true);
+}
+
 function watchMessageList() {
   const host = $('messages');
   if (!host || !window.MutationObserver) return;
@@ -634,8 +920,20 @@ function buildBar() {
   // Announced to a screen reader, which nothing else in the shell currently is.
   bar.setAttribute('role', 'status');
   bar.setAttribute('aria-live', 'polite');
-  document.body.appendChild(bar);
+  // Above the scroller, inside the conversation column: it belongs to the
+  // conversation, and putting it in the flow is what stops it covering messages.
+  const list = $('messages');
+  if (list?.parentNode) list.parentNode.insertBefore(bar, list);
+  else document.body.appendChild(bar);
   paintBar();
+}
+
+// Local wall-clock, because "saved at 14:30" is something a person can judge
+// against their own day. A relative "3 hours ago" needs arithmetic to act on.
+function clockOf(ms) {
+  try {
+    return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return 'earlier'; }
 }
 
 function queueCounts() {
@@ -658,9 +956,10 @@ function paintBar() {
   if (!navigator.onLine) {
     cls = 'ob-down';
     glyph = icon('plug');
+    const since = servedAt ? ` Showing what was saved at ${clockOf(servedAt)}.` : '';
     text = waiting
-      ? `No internet. ${n(waiting, 'message', 'messages')} will send when you are back.`
-      : 'No internet. You can keep reading and writing.';
+      ? `No internet. ${n(waiting, 'message', 'messages')} will send when you are back.${since}`
+      : `No internet.${since || ' You can keep reading and writing.'}`;
   } else if (netFails >= 2) {
     cls = 'ob-wait';
     glyph = icon('clock');
@@ -750,12 +1049,18 @@ const TOAST_MAP = [
   [/\bunauthenticated\b/i, 'You were signed out. Open the app again to sign in.'],
 ];
 
+// Set whenever a message row has just been given a readable failure of its own.
+let rowExplainedAt = 0;
+
 function humanizeToast(node) {
   if (!(node instanceof HTMLElement) || !node.classList.contains('toast')) return;
   const txt = node.textContent || '';
   for (const [re, replacement] of TOAST_MAP) {
     if (!re.test(txt)) continue;
-    if (replacement === null) node.remove();
+    // If the message row itself is already saying this, the toast is a second
+    // copy of the same sentence - and it lands on top of the Try again and
+    // Delete buttons that are the only way to act on it.
+    if (replacement === null || Date.now() - rowExplainedAt < 4000) node.remove();
     else node.textContent = replacement;
     return;
   }

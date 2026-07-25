@@ -3,11 +3,12 @@
 import { api } from '../api.js';
 import { store, bus, nameOf } from '../store.js';
 import { getSub } from '../sb.js';
-import { $, el, esc, debounce, throttle, fmtSize } from '../util.js';
+import { $, el, esc, debounce, fmtSize } from '../util.js';
 import { toast, listSlash, runSlash, renderComposerButtons } from '../ui.js';
 import { uploadFile } from './media.js';
 import { openEmojiPicker, searchEmoji } from './emoji.js';
 import { appendMessage, claimMessage, scrollDown, upgradeMessageRow } from './messages.js';
+import { icon } from '../icons.js';
 
 let pending = [];          // attachments being/already uploaded
 let ac = null;             // active autocomplete state
@@ -170,14 +171,76 @@ const saveDraft = debounce(() => {
 }, 900);
 
 // ------------------------------------------------------------------ typing
-const emitTyping = throttle(() => {
+// Typing was a heartbeat: one broadcast every 1.8s for as long as your fingers
+// moved. Measured on a live two-client run, one 55-character sentence at adult
+// thumb speed produced SIX broadcasts, each of them fanned out to every person
+// with that channel open and billed per recipient. In a 300-person channel five
+// simultaneous typists is 833 messages/second, over the Pro plan's 500/s cap -
+// so the indicator, not the messages, is what takes the product down first.
+//
+// This is the state machine every other chat product uses instead: one edge on
+// idle -> typing, one edge on typing -> idle, and a slow keepalive in between so
+// a long message does not silently expire on the receiver. Two broadcasts for a
+// normal sentence rather than one per 1.8 seconds of effort.
+//
+// The stop edge rides INSIDE the existing 'typing' event as a payload flag
+// rather than as a new broadcast event, deliberately: the handler map for the
+// typ: topic lives in channels.js, and a payload field needs no change there and
+// no coordination with a client that has not reloaded yet. An old client sends
+// no `state` and is read as a start, which is exactly what it means.
+const TYPING_KEEPALIVE_MS = 10000;   // < the receiver's 12s expiry, so a real typist never flickers
+const TYPING_IDLE_MS = 4000;         // fingers stopped: say so rather than let it time out
+let typingOn = false;
+let typingSentAt = 0;
+let typingIdleTimer = null;
+
+function sendTyping(state) {
   const sub = getSub('typing');
   if (!sub) return;
   sub.send({
     type: 'broadcast', event: 'typing',
-    payload: { user_id: store.me, name: nameOf(store.me) },
+    payload: { user_id: store.me, name: nameOf(store.me), state },
   });
-}, 1800);
+}
+
+export function stopTyping() {
+  clearTimeout(typingIdleTimer);
+  typingIdleTimer = null;
+  if (!typingOn) return;
+  typingOn = false;
+  sendTyping('stop');
+}
+
+// Called on every keystroke. Almost all of them return without touching the
+// socket, which is the point.
+function emitTyping() {
+  const c = composerEl();
+  // Nothing in the box is not typing. Deleting back to empty must retract the
+  // indicator, not keep publishing it.
+  if (!c || !c.value.trim()) { stopTyping(); return; }
+  // A hidden tab is a phone in a pocket or a laptop lid coming down. Anything it
+  // publishes is fanned out to everyone and read by nobody.
+  if (document.visibilityState === 'hidden') { stopTyping(); return; }
+
+  const now = Date.now();
+  if (!typingOn || now - typingSentAt >= TYPING_KEEPALIVE_MS) {
+    typingOn = true;
+    typingSentAt = now;
+    sendTyping('start');
+  }
+  clearTimeout(typingIdleTimer);
+  typingIdleTimer = setTimeout(stopTyping, TYPING_IDLE_MS);
+}
+
+// Switching channel replaces the 'typing' subscription under us, so there is no
+// longer a socket to retract on. Drop the local state instead - the people still
+// in the old channel expire the indicator on their own 12s timer.
+function resetTyping() {
+  clearTimeout(typingIdleTimer);
+  typingIdleTimer = null;
+  typingOn = false;
+  typingSentAt = 0;
+}
 
 // ------------------------------------------------------------------ send
 // The composer must not accept input before there is somewhere to send it.
@@ -215,6 +278,9 @@ export async function send() {
   c.value = '';
   autogrow();
   acHide();
+  // The message itself is about to arrive on their screen. Retract the indicator
+  // in the same breath rather than leaving it to expire behind the message.
+  stopTyping();
   pending = [];
   renderChips();
 
@@ -248,7 +314,13 @@ export async function send() {
     }
     if (data) {
       store.seen.add(data.id);
-      store.cursor = Math.max(store.cursor, data.seq || 0);
+      // Only if it is the very next event. Jumping the cursor to my own seq
+      // would step over anything published between my last applied event and
+      // this send, and a cursor that has stepped over an event can never ask
+      // for it again - that is precisely the bug gap detection exists to catch,
+      // and the sender must not reintroduce it for themselves.
+      if (!store.currentDM && data.seq === store.cursor + 1) store.cursor = data.seq;
+      if (store.currentDM && data.seq === store.dmCursor + 1) store.dmCursor = data.seq;
       // Re-point the row that is already on screen at the real message. Not a
       // replacement: the optimistic node stays, so its grouping against the
       // message above it survives and nothing holding a reference to it (a
@@ -258,19 +330,47 @@ export async function send() {
     }
   } catch (e) {
     row.classList.remove('pending');
+    // The durable outbox owns this row's story when it is running: it has
+    // already queued the message, tagged the row, and painted a state strip
+    // saying so. Painting a SECOND, different explanation on top of that - and
+    // watching it get deleted 140ms later - is the opposite of calm. It also
+    // told a lie: "not delivered" for a message that is on disk and will send.
+    if (row.dataset.obNonce || row.querySelector('.ob-state')) return;
+
+    // No outbox: this row is on its own, so explain it here. Quietly - the
+    // message is still there, still readable, and one button fixes it.
     row.classList.add('failed');
-    const body = row.querySelector('.body');
-    const retry = el('button', 'sm ghost', 'Soop');
+    const mbody = row.querySelector('.mbody') || row;
+    row.querySelector('.send-state')?.remove();
+    const strip = el('div', 'send-state');
+    strip.innerHTML = `<span>${icon('clock')}</span><span>${esc(sendFailureLine(e))}</span>`;
+    const retry = el('button', 'sm', 'Try again');
     retry.onclick = () => {
       row.remove();
       store.seen.delete('n:' + nonce);
       c.value = text;
+      autogrow();
       send();
     };
-    body.appendChild(el('span', 'send-error', ' ' + esc(e.message || 'not delivered') + ' '));
-    body.appendChild(retry);
-    toast(e.message || 'Message failed', 'error');
+    strip.appendChild(retry);
+    const anchor = mbody.querySelector('.rxns');
+    if (anchor) mbody.insertBefore(strip, anchor); else mbody.appendChild(strip);
+    scrollDown();
+    // No red toast on top of it. The row is on screen and says what happened;
+    // an alarm about something already explained in place reads as two failures.
+    if (!row.isConnected) toast(sendFailureLine(e));
   }
+}
+
+// A person who cannot send does not need an error code, they need to know
+// whether to try again now or later. Everything else is noise.
+function sendFailureLine(e) {
+  const msg = String(e?.message || '');
+  if (!navigator.onLine || /No connection|Failed to fetch|NetworkError/i.test(msg)) {
+    return 'Not sent - no internet. Try again when you are back.';
+  }
+  if (/rate_limited|53400|too fast/i.test(msg)) return 'Not sent - slow down a moment, then try again.';
+  return 'Not sent. ' + (msg || 'Try again.');
 }
 
 // ------------------------------------------------------------------ reply bar
@@ -305,8 +405,8 @@ export function initComposer() {
   const c = composerEl();
   if (!c) return;
   setComposerEnabled(false);
-  bus.on('channel:open', () => setComposerEnabled(true));
-  bus.on('dm:open', () => setComposerEnabled(true));
+  bus.on('channel:open', () => { resetTyping(); setComposerEnabled(true); });
+  bus.on('dm:open', () => { resetTyping(); setComposerEnabled(true); });
 
   c.addEventListener('keydown', (e) => {
     if (ac) {
@@ -325,7 +425,13 @@ export function initComposer() {
   });
 
   c.addEventListener('input', () => { autogrow(); updateAutocomplete(); emitTyping(); saveDraft(); });
-  c.addEventListener('blur', () => setTimeout(acHide, 120));
+  c.addEventListener('blur', () => { setTimeout(acHide, 120); stopTyping(); });
+  // A tab going away mid-sentence would otherwise leave "Asha is typing…" on
+  // everyone else's screen until it expired, which is the state that makes a
+  // typing indicator feel like a lie.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') stopTyping();
+  });
   c.addEventListener('paste', (e) => {
     const files = [...(e.clipboardData?.items || [])]
       .filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter(Boolean);

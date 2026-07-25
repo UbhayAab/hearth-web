@@ -8,6 +8,7 @@ import { $, el, esc, fmt, timeOf, dayOf, plain, hueOf, initials } from '../util.
 import { QUICK_EMOJI } from '../config.js';
 import { getMessageActions, toast, contextMenu } from '../ui.js';
 import { attsHtml, hydrateMedia } from './media.js';
+import * as pagecache from '../lib/pagecache.js';
 import { openEmojiPicker } from './emoji.js';
 import { icon } from '../icons.js';
 
@@ -48,6 +49,11 @@ export function buildMessage(m, opts = {}) {
   if (mentionsMe(m)) row.classList.add('mention');
   if (m.priority === 'urgent') row.classList.add('urgent');
   if (opts.grouped) row.classList.add('grouped');
+  // A row can now be built from a cache or from the trimmed window, so the
+  // deleted state has to be a property of the message rather than something only
+  // applyDelete() knows how to paint.
+  const gone = !!m.deleted_at;
+  if (gone) row.classList.add('deleted');
 
   const th = m.id ? store.rootThreads.get(m.id) : null;
   const who = nameOf(m.author_id);
@@ -67,15 +73,16 @@ export function buildMessage(m, opts = {}) {
       ${m.reply_to_id ? `<div class="quote" data-q="${esc(m.reply_to_id)}">↩ …</div>` : ''}
       ${m.also_send_to_channel && m.thread_id
         ? '<div class="thread-origin">↳ also sent to the channel from a thread</div>' : ''}
-      <div class="body">${fmt(m.body_text, fmtOpts())}${m.edited_at ? ' <span class="edited">(edited)</span>' : ''}</div>
-      ${attsHtml(m)}
+      <div class="body">${gone ? '<span class="muted">message deleted</span>'
+        : fmt(m.body_text, fmtOpts()) + (m.edited_at ? ' <span class="edited">(edited)</span>' : '')}</div>
+      ${gone ? '' : attsHtml(m)}
       <div class="rxns" data-rx="${esc(m.id || '')}"></div>
       <div class="threadind" data-th="${esc(m.id || '')}" style="${th ? '' : 'display:none'}"></div>
     </div>
     <div class="actions"></div>`;
 
   // ---- hover action bar: quick reactions + registered actions ----
-  if (context !== 'static' && m.id) {
+  if (context !== 'static' && m.id && !gone) {
     const bar = row.querySelector('.actions');
     for (const e of QUICK_EMOJI) {
       const b = el('button', 'icon quick', e);
@@ -173,6 +180,55 @@ export function scrollDown() {
 }
 
 // ------------------------------------------------------------------ list append
+// Where does this message belong? Returns the node it must be inserted BEFORE,
+// or null for "at the end", which is the overwhelmingly common case.
+//
+// A blind appendChild was fine while the only way a message reached the list was
+// in arrival order. It stops being fine the moment a gap is healed: the repaired
+// older message would render BELOW newer ones and stay there until a reload,
+// which reads worse to a person than the message being missing. Ordering is the
+// entire point of having a gapless seq, so honour it here.
+//
+// Rows without a seq are the optimistic ones the sender is still waiting on.
+// They sit at the bottom by definition, so they act as a floor: anything
+// arriving goes after them, never above.
+function orderedSlot(host, m) {
+  const seq = +(m.seq || 0);
+  if (!seq) return null;
+  const rows = host.querySelectorAll(':scope > .msg');
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const s = +(rows[i].dataset.seq || 0);
+    if (!s || s <= seq) return rows[i].nextElementSibling || null;
+  }
+  return host.firstElementChild || null;
+}
+
+// Out-of-order insert: always a full (ungrouped) row, because the neighbours it
+// lands between were grouped against each other.
+function insertOrdered(host, m, context, before) {
+  const t = new Date(m.created_at || Date.now()).getTime();
+  const day = dayOf(m.created_at || Date.now());
+  const row = buildMessage(m, { context, grouped: false });
+  row.dataset.time = t;
+  row.dataset.day = day;
+
+  const prev = before.previousElementSibling;
+  if (!prev || (prev.dataset.day && prev.dataset.day !== day)) {
+    const d = el('div', 'daydiv', `<span>${esc(day)}</span>`);
+    d.dataset.day = day;
+    host.insertBefore(d, before);
+  }
+  host.insertBefore(row, before);
+
+  // The row below was grouped against whatever used to be above it. If that is
+  // no longer the same author, rebuild it so it grows its avatar back.
+  if (before.classList?.contains('grouped') && before.dataset.author !== m.author_id) {
+    const cached = store.msgCache.get(before.dataset.id);
+    if (cached) appendMessage(host, cached, context, { replacing: before });
+  }
+  return row;
+}
+
 // Appends into `host`, deciding grouping and day dividers from the previous row.
 // `opts.replacing` swaps an existing row (the optimistic one) for a freshly
 // built row. Grouping is decided from the neighbour ABOVE that row rather than
@@ -182,6 +238,10 @@ export function scrollDown() {
 // (a hover, a scroll, a test) trips over.
 export function appendMessage(host, m, context = 'channel', opts = {}) {
   const anchor = opts.replacing || null;
+  if (!anchor && !opts.bulk) {
+    const before = orderedSlot(host, m);
+    if (before) return insertOrdered(host, m, context, before);
+  }
   const last = anchor ? anchor.previousElementSibling : host.lastElementChild;
   const lastAuthor = last?.dataset?.author;
   const lastTime = last?.dataset?.time ? +last.dataset.time : 0;
@@ -209,6 +269,173 @@ export function appendMessage(host, m, context = 'channel', opts = {}) {
     host.appendChild(row);
   }
   return row;
+}
+
+// ------------------------------------------------------------------ render window
+// Measured on this app, 4x CPU, real render path: 200 messages in the list
+// scroll at a flat 60fps, 1000 messages produce a p95 frame of 3.7 SECONDS, and
+// 5000 messages take 121s to build, hold 256,654 DOM nodes and scroll at a p50
+// frame of 133ms. The list is not virtualised and does not need to be - it needs
+// a ceiling. A channel that has been open all day, or paged up through a year of
+// history, is the same list.
+//
+// So the DOM holds a window. Rows that fall out of it are remembered by id -
+// their data is already in store.msgCache, which is not the expensive part - and
+// re-rendered when the scroll comes back for them. Nothing is refetched.
+//
+// This is deliberately NOT virtual scrolling: no fixed row heights, no absolute
+// positioning, no scroll maths, no fighting the browser's anchoring. The list
+// stays an ordinary block of elements, and there are simply never more than
+// MAX_RENDERED of them.
+export const MAX_RENDERED = 320;
+// 24, not a full page: bringing rows back is synchronous, and at 9ms a row a
+// chunk of 60 is a 540ms hitch at the exact moment the person is dragging the
+// list. Measured p95 frame while scrolling a trimmed list: 900ms at 60, 340ms
+// at 24. Small chunks, more often, is the right trade for a scroll.
+const RESTORE_CHUNK = 24;      // how many come back per scroll into the edge
+const KEEP_ON_JUMP = 120;      // how many stay when jumping to the newest
+
+let trimmedAbove = [];         // ids trimmed off the TOP, ascending
+let trimmedBelow = [];         // ids trimmed off the BOTTOM, ascending
+
+export function resetWindow() { trimmedAbove = []; trimmedBelow = []; }
+export const windowState = () => ({ above: trimmedAbove.length, below: trimmedBelow.length });
+
+// A live message that arrives while the reader is paged up must not be appended
+// under rows that are older than it. It is recorded instead, and comes back with
+// the rest of the tail when they scroll down or press "New messages".
+export function deferBelow(m) {
+  if (!m?.id) return;
+  store.msgCache.set(m.id, m);
+  if (!trimmedBelow.includes(m.id)) trimmedBelow.push(m.id);
+}
+
+function stripLeadingDividers(host) {
+  while (host.firstElementChild && host.firstElementChild.classList.contains('daydiv')) {
+    host.firstElementChild.remove();
+  }
+}
+
+// After appending at the bottom: drop rows off the top.
+export function capWindow(host, max = MAX_RENDERED) {
+  if (!host) return;
+  let rows = host.querySelectorAll('.msg');
+  if (rows.length <= max) return;
+  let drop = rows.length - max;
+  for (const row of rows) {
+    if (drop-- <= 0) break;
+    if (row.dataset.id) trimmedAbove.push(row.dataset.id);
+    row.remove();
+  }
+  stripLeadingDividers(host);
+}
+
+// After prepending at the top: drop rows off the bottom.
+export function capWindowTop(host, max = MAX_RENDERED) {
+  if (!host) return;
+  const rows = [...host.querySelectorAll('.msg')];
+  if (rows.length <= max) return;
+  const doomed = rows.slice(max);
+  for (let i = doomed.length - 1; i >= 0; i--) {
+    if (doomed[i].dataset.id) trimmedBelow.unshift(doomed[i].dataset.id);
+    doomed[i].remove();
+  }
+}
+
+// Build many rows off-document and attach them in one go. One layout instead of
+// fifty, which is most of the difference between a channel that opens and a
+// channel that unrolls.
+export function renderBatch(host, msgs, context = 'channel') {
+  if (!host || !msgs.length) return 0;
+  const holder = document.createElement('div');
+  let n = 0;
+  // bulk: these rows are already in seq order, so the ordered-insert scan would
+  // be a linear search per row for an answer it always knows - O(n^2) on a page.
+  for (const m of msgs) { appendMessage(holder, m, context, { bulk: true }); n++; }
+  const frag = document.createDocumentFragment();
+  while (holder.firstChild) frag.appendChild(holder.firstChild);
+  host.appendChild(frag);
+  return n;
+}
+
+// Insert a batch ABOVE what is already there, preserving the scroll position and
+// repairing the seam. Without the repair the row that used to be first keeps the
+// full avatar+name header it needed when it was first, and may be missing the
+// day divider that now belongs above it.
+export function prependBatch(host, msgs, context = 'channel') {
+  if (!host || !msgs.length) return 0;
+  const prevH = host.scrollHeight;
+  const prevTop = host.scrollTop;
+  const seam = host.querySelector('.msg');
+  const holder = document.createElement('div');
+  for (const m of msgs) appendMessage(holder, m, context, { bulk: true });
+  const frag = document.createDocumentFragment();
+  while (holder.firstChild) frag.appendChild(holder.firstChild);
+  host.insertBefore(frag, host.firstChild);
+  if (seam) stitch(host, seam, context);
+  host.scrollTop = prevTop + (host.scrollHeight - prevH);
+  return msgs.length;
+}
+
+// Rebuild one row so its grouping and day divider agree with the row now above
+// it. Cheap: one row, from the cache, no network.
+function stitch(host, row, context) {
+  const m = store.msgCache.get(row.dataset.id);
+  if (!m) return;
+  const prev = row.previousElementSibling;
+  if (!prev || !prev.classList.contains('msg')) return;
+  const day = dayOf(m.created_at || Date.now());
+  if (prev.dataset.day !== day) {
+    const d = el('div', 'daydiv', `<span>${esc(day)}</span>`);
+    d.dataset.day = day;
+    host.insertBefore(d, row);
+    return;                      // a divider between them means never grouped
+  }
+  appendMessage(host, m, context, { replacing: row });
+}
+
+function rowsFor(ids) {
+  const out = [];
+  for (const id of ids) { const m = store.msgCache.get(id); if (m) out.push(m); }
+  return out;
+}
+
+// Scrolled to the top edge with trimmed history behind it: bring a chunk back.
+// Returns false when there is nothing left, which is the signal to page the
+// server instead.
+export function restoreAbove(host, n = RESTORE_CHUNK) {
+  if (!trimmedAbove.length) return false;
+  const take = trimmedAbove.slice(-n);
+  trimmedAbove = trimmedAbove.slice(0, trimmedAbove.length - take.length);
+  prependBatch(host, rowsFor(take));
+  capWindowTop(host);
+  return true;
+}
+
+export function restoreBelow(host, n = RESTORE_CHUNK) {
+  if (!trimmedBelow.length) return false;
+  const take = trimmedBelow.slice(0, n);
+  trimmedBelow = trimmedBelow.slice(take.length);
+  renderBatch(host, rowsFor(take));
+  capWindow(host);
+  return true;
+}
+
+// "New messages" / scroll-to-latest when a lot has been trimmed: rebuilding the
+// tail is bounded work, walking back to it one chunk at a time is not.
+export function jumpLatest(host, context = 'channel') {
+  if (!trimmedBelow.length) { scrollDown(); return; }
+  const domIds = [...host.querySelectorAll('.msg')].map((r) => r.dataset.id).filter(Boolean);
+  const all = [...trimmedAbove, ...domIds, ...trimmedBelow];
+  const keep = all.slice(-KEEP_ON_JUMP);
+  trimmedAbove = all.slice(0, all.length - keep.length);
+  trimmedBelow = [];
+  host.innerHTML = '';
+  renderBatch(host, rowsFor(keep), context);
+  scrollDown();
+  // Rows whose height is not final until the next layout (avatars, attachments,
+  // a wrapped line) leave the first scroll short. One more frame settles it.
+  requestAnimationFrame(() => scrollDown());
 }
 
 // Promote an optimistic row to a real one WITHOUT replacing the node.
@@ -353,16 +580,24 @@ export async function loadReactions(ids) {
 }
 
 // ------------------------------------------------------------------ edit/delete
+// Both of these also correct the cached page. A message that was edited or
+// deleted while this phone had the channel cached must not come back in its old
+// form on the next cold start - a stale page is a fine placeholder, a page that
+// contradicts a deletion is not.
 export function applyEdit(id, bodyText) {
-  const row = document.getElementById('m' + id);
-  if (!row) return;
-  row.querySelector('.body').innerHTML =
-    fmt(bodyText, fmtOpts()) + ' <span class="edited">(edited)</span>';
   const cached = store.msgCache.get(id);
   if (cached) store.msgCache.set(id, { ...cached, body_text: bodyText, edited_at: new Date().toISOString() });
+  pagecache.amend(store.me, store.current?.id, id, { body_text: bodyText, edited_at: new Date().toISOString() });
+  const row = document.getElementById('m' + id);
+  if (!row) return;                     // trimmed out of the window; the cache above has it
+  row.querySelector('.body').innerHTML =
+    fmt(bodyText, fmtOpts()) + ' <span class="edited">(edited)</span>';
 }
 
 export function applyDelete(id) {
+  const cached = store.msgCache.get(id);
+  if (cached) store.msgCache.set(id, { ...cached, deleted_at: new Date().toISOString(), body_text: '' });
+  pagecache.amend(store.me, store.current?.id, id, { deleted_at: new Date().toISOString(), body_text: '' });
   const row = document.getElementById('m' + id);
   if (!row) return;
   row.classList.add('deleted');

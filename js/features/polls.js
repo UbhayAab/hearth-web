@@ -311,6 +311,7 @@ export function register({ ui }) {
   bus.on('message:render', ({ msg, el: row }) => mount(msg, row));
 
   bus.on('channel:open', scheduleBind);
+  bus.on('channel:subscribed', scheduleBind);
   scheduleBind();
 
   ui.addSlashCommand({

@@ -4,7 +4,30 @@
 // stepping on the other person: a block that has focus or an unsaved edit is
 // never re-rendered from the server, and the poll only replaces blocks whose
 // server signature actually changed.
-import hljs from 'https://esm.sh/highlight.js@11.10.0';
+// highlight.js is 458 KB over 195 requests. Importing it here put the whole of
+// it on the app's first load, because features are registered at boot - for a
+// code block inside a canvas that most people will never open. Fetched on the
+// first code block instead, and the block is repainted when it lands.
+let hljs = null;
+let hljsPending = null;
+function loadHljs() {
+  if (!hljsPending) {
+    hljsPending = import('https://esm.sh/highlight.js@11.10.0')
+      .then((m) => { hljs = m.default || m; repaintCanvasCode(); return hljs; })
+      .catch(() => null);
+  }
+  return hljsPending;
+}
+function repaintCanvasCode() {
+  if (!hljs) return;
+  for (const n of document.querySelectorAll('.cv-pre > code[data-cv-hl]')) {
+    const lang = n.getAttribute('data-cv-hl');
+    try {
+      if (lang && hljs.getLanguage(lang)) n.innerHTML = hljs.highlight(n.textContent, { language: lang }).value;
+    } catch { /* keep the escaped text */ }
+    n.removeAttribute('data-cv-hl');
+  }
+}
 import { nameOf } from '../store.js';
 import { tryRpc } from '../api.js';
 import { el, esc, fmt, relTime, debounce } from '../util.js';
@@ -381,9 +404,11 @@ function openEditor(canvasId) {
 function codeHtml(text, lang) {
   let inner;
   try {
-    inner = lang && hljs.getLanguage(lang) ? hljs.highlight(text, { language: lang }).value : esc(text);
+    inner = hljs && lang && hljs.getLanguage(lang) ? hljs.highlight(text, { language: lang }).value : esc(text);
   } catch { inner = esc(text); }
-  return `<pre class="cv-pre"><code>${inner}</code></pre>`;
+  if (!hljs && lang) loadHljs();
+  const pending = !hljs && lang ? ` data-cv-hl="${esc(lang)}"` : '';
+  return `<pre class="cv-pre"><code${pending}>${inner}</code></pre>`;
 }
 
 // ------------------------------------------------------------------ create

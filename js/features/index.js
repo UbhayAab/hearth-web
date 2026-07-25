@@ -28,6 +28,9 @@ const FEATURES = [
   'tasks',
   'orientation',
   'activityReport',
+  // Labelled sidebar rows for the four panels above. Without it they are only
+  // header buttons past the inline cap, and the channel bar's overflow is dead.
+  'coordnav',
   'offline',
   // Last on purpose: it re-registers a few core panels by id and decorates what
   // every other feature has already put on screen.

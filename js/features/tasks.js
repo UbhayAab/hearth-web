@@ -8,7 +8,7 @@
 // Two states, open and done. No projects, no boards, no dependencies, no subtasks.
 // At 30 people the whole coordination problem is "who said they would do it and
 // have they".
-import { rpc, tryRpc } from '../api.js';
+import { rpc, tryRpc, table } from '../api.js';
 import { store, bus, nameOf, hasPerm } from '../store.js';
 import { PERM } from '../config.js';
 import { el, esc, plain, relTime, toLocalInput, fromLocalInput } from '../util.js';
@@ -51,22 +51,45 @@ function dueLabel(iso) {
   return ms <= 0 ? `${unit} overdue` : `due in ${unit}`;
 }
 
-// Everyone in the Space who could plausibly be given this, for the picker. The
-// profiles map is already populated by core, so this costs no request.
+// Who can be given this task.
 //
-// Capped: a <select> is the right control for a 30-person NGO and the wrong one
-// for a 900-person Space, and the profiles map is "everyone this client has ever
-// seen", not "everyone in this Space". Cap the DOM and always keep the two names
-// that must be selectable - me, and whoever holds it now.
+// This CANNOT come from store.profiles. That map is "every profile this client
+// has ever seen" across every Space it has ever opened - measured at 1183 entries
+// on a freshly signed-in account whose only Space had two members - so the picker
+// filled up with strangers, and create_task then refused them with
+// `assignee_cannot_see_channel`. A picker whose entries mostly error is worse than
+// no picker.
+//
+// So read workspace_members for the Space we are actually in (wm_select RLS lets a
+// member see their own Space's roster and nothing else) and look the names up in
+// the profiles map, which by then holds them. One small request per dialog open,
+// which is the right trade against handing someone a list they cannot use.
 const MAX_ASSIGNEES = 200;
-function assigneeOptions(keep = null) {
+
+async function assigneeOptions(keep = null) {
   const people = [];
-  for (const [id, p] of store.profiles || []) {
-    people.push({ value: id, label: p.display_name || p.username || 'someone' });
+  if (store.ws) {
+    const mem = await table('workspace_members', (q) => q.eq('workspace_id', store.ws.id));
+    const ids = mem.map((m) => m.user_id);
+    // Anyone core has not cached yet - a volunteer who joined while this tab was
+    // open - would otherwise render as "someone".
+    const unknown = ids.filter((u) => !store.profiles.has(u));
+    if (unknown.length) {
+      for (const p of await table('profiles', (q) => q.in('id', unknown.slice(0, 500)))) {
+        store.profiles.set(p.id, { ...(store.profiles.get(p.id) || {}), ...p });
+      }
+    }
+    for (const id of ids) {
+      const p = store.profiles.get(id) || {};
+      if (p.is_ghost) continue;                       // deleted accounts cannot do a task
+      people.push({ value: id, label: p.display_name || p.username || 'someone' });
+    }
   }
   people.sort((a, z) => a.label.localeCompare(z.label));
-  let list = people.slice(0, MAX_ASSIGNEES);
-  for (const id of [store.me, keep]) {
+
+  const list = people.slice(0, MAX_ASSIGNEES);
+  // Me and the current holder must always be selectable even past the cap.
+  for (const id of [keep, store.me]) {
     if (id && !list.some((o) => o.value === id)) {
       const found = people.find((o) => o.value === id);
       if (found) list.unshift(found);
@@ -83,7 +106,7 @@ async function createDialog(msg) {
     fields: [
       { name: 'title', label: 'What needs doing', value: preset, required: true,
         placeholder: 'Collect the receipts' },
-      { name: 'assignee', label: 'Who is doing it', type: 'select', options: assigneeOptions(),
+      { name: 'assignee', label: 'Who is doing it', type: 'select', options: await assigneeOptions(),
         value: store.me, hint: 'They will see it in their Later queue straight away.' },
       { name: 'due', label: 'Due by (optional)', type: 'datetime-local',
         hint: 'They get one reminder when it falls due. Leave blank for no deadline.' },
@@ -139,6 +162,22 @@ function paintChip(host, tasks) {
   }
 }
 
+// A message you just sent is painted optimistically with the client nonce as its
+// id, and core's upgradeMessageRow() then rewrites row.dataset.id to the real one
+// WITHOUT re-emitting message:render. Anything a feature stamped at render time is
+// therefore stale for exactly the message the user is looking at.
+//
+// Measured: the row ended up data-id=019f9a15-16a7-... (server uuidv7) while the
+// slot inside it still said data-msg=1995bd17-2511-... (the v4 nonce), so the chip
+// for a task you had just created never appeared until a reload.
+//
+// The row is the authority. Read the id off it at paint time and re-stamp.
+function slotMessageId(slot) {
+  const live = slot.closest('.msg')?.dataset.id;
+  if (live && live !== slot.dataset.msg) slot.dataset.msg = live;
+  return slot.dataset.msg;
+}
+
 // One workspace-scoped read repaints every chip on screen. Per-message lookups
 // would be one request per rendered row, which on 3G is the wrong trade.
 async function refreshChips() {
@@ -152,13 +191,21 @@ async function refreshChips() {
     byMessage.get(t.message_id).push(t);
   }
   for (const h of document.querySelectorAll('.' + CLS + '-slot')) {
-    paintChip(h, byMessage.get(h.dataset.msg) || []);
+    paintChip(h, byMessage.get(slotMessageId(h)) || []);
   }
 }
 
 function mount(msg, row) {
   if (!msg?.id || msg.conversation_id) return;
-  if (row.querySelector('.' + CLS + '-slot')) return;
+  const existing = row.querySelector('.' + CLS + '-slot');
+  if (existing) {
+    // Re-render of a row we already decorated: keep the node, refresh the id.
+    if (existing.dataset.msg !== msg.id) {
+      existing.dataset.msg = msg.id;
+      paintChip(existing, byMessage.get(msg.id) || []);
+    }
+    return;
+  }
   const body = row.querySelector('.body') || row;
   const slot = el('div', CLS + '-slot');
   slot.dataset.msg = msg.id;
@@ -174,7 +221,10 @@ const TABS = [
   { key: 'assigned', label: 'I asked for', empty: 'You have not asked anyone to do anything yet.' },
   { key: 'all', label: 'Everything', empty: 'No tasks in this Space yet.' },
 ];
-let activeTab = localStorage.getItem('hearth.tasks.tab') || 'mine';
+// Validated, not trusted: a stale value from an older build would make
+// TABS.find() return undefined and throw while rendering the empty state.
+let activeTab = TABS.some((t) => t.key === localStorage.getItem('hearth.tasks.tab'))
+  ? localStorage.getItem('hearth.tasks.tab') : 'mine';
 
 async function renderPanel(body, ctx = {}) {
   if (ctx.tab) activeTab = ctx.tab;
@@ -200,14 +250,14 @@ async function renderPanel(body, ctx = {}) {
 
   if (err) { body.appendChild(el('div', 'empty', esc(humanError(err)))); return; }
 
+  const tabDef = TABS.find((t) => t.key === activeTab) || TABS[0];
   const list = rows || [];
   const open = list.filter((t) => !t.done_at);
   const done = list.filter((t) => t.done_at).slice(0, 25);
   openCount = activeTab === 'mine' ? open.length : openCount;
 
   if (!list.length) {
-    const tab = TABS.find((t) => t.key === activeTab);
-    const e = el('div', 'empty', esc(tab.empty) + '<br><br>');
+    const e = el('div', 'empty', esc(tabDef.empty) + '<br><br>');
     e.appendChild(document.createTextNode('To make one: press and hold a message '
       + '(or hover it on a computer), open the ... menu and pick "Make this a task".'));
     body.appendChild(e);
@@ -296,7 +346,7 @@ async function editDialog(t) {
     fields: [
       { name: 'title', label: 'What needs doing', value: t.title, required: true },
       { name: 'assignee', label: 'Who is doing it', type: 'select',
-        options: assigneeOptions(t.assignee_id), value: t.assignee_id || '' },
+        options: await assigneeOptions(t.assignee_id), value: t.assignee_id || '' },
       { name: 'due', label: 'Due by', type: 'datetime-local',
         value: t.due_at ? toLocalInput(t.due_at) : '',
         hint: 'Clear this box to remove the deadline.' },
@@ -334,6 +384,10 @@ async function refreshCount() {
   if (!Array.isArray(rows)) return;
   openCount = rows.length;
   paintBadge();
+  // The header button only exists when Tasks lands inside ui.inlineCap, which on
+  // a full registry it does not. Publish the number so the sidebar row - the
+  // surface people actually reach this through - can carry the badge instead.
+  bus.emit('tasks:count', { open: openCount });
 }
 
 // Core rebuilds the header row whenever any feature adds a button, which wipes the
@@ -381,7 +435,9 @@ function style() {
 .${CLS}-chiplate{border-left-color:var(--c-danger)}
 .${CLS}-chiptext{font-weight:var(--t-semibold);word-break:break-word}
 .${CLS}-chipwho{color:var(--c-text-2)}
-.${CLS}-chipdue{color:var(--c-warn)}
+/* --c-warn as text is 2.83:1 on surface-2 in the colorful theme. The chip is
+   already colour-coded by its left border, so the label reads in --c-text-2. */
+.${CLS}-chipdue{color:var(--c-text-2)}
 .${CLS}-chiplate .${CLS}-chipdue{color:var(--c-danger)}
 .${CLS}-chip button{margin-left:auto;min-height:32px}
 
@@ -391,11 +447,11 @@ function style() {
 .${CLS}-carddone .${CLS}-cardtitle{text-decoration:line-through;opacity:.7}
 .${CLS}-cardtop{display:flex;gap:var(--s-4);align-items:baseline;flex-wrap:wrap}
 .${CLS}-cardtitle{flex:1;font-weight:var(--t-semibold);word-break:break-word}
-.${CLS}-due{font-size:var(--t-xs);color:var(--c-warn);white-space:nowrap}
+.${CLS}-due{font-size:var(--t-xs);color:var(--c-text-2);white-space:nowrap}
 .${CLS}-late{color:var(--c-danger);font-weight:var(--t-semibold)}
 .${CLS}-meta{font-size:var(--t-xs);margin-top:var(--s-2);word-break:break-word}
 .${CLS}-quote{margin-top:var(--s-3);padding-left:var(--s-4);
-  border-left:2px solid var(--c-border);color:var(--c-text-3);font-size:var(--t-sm)}
+  border-left:2px solid var(--c-border);color:var(--c-text-2);font-size:var(--t-sm)}
 .${CLS}-bar{margin-top:var(--s-3);flex-wrap:wrap;gap:var(--s-2)}
 .${CLS}-bar button{min-height:36px}
 .${CLS}-badge{margin-left:var(--s-1);vertical-align:top}`;

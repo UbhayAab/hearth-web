@@ -7,6 +7,37 @@
 <meta name="description" content="Soop - invite-only team chat: channels, threads that stay out of the way, voice rooms and high-fidelity media. A Redtree product." />
 <meta name="theme-color" content="#0f1115" />
 <link rel="manifest" href="./manifest.webmanifest" />
+
+<!-- Three third-party origins sit on the path to the first message: the module
+     CDN, the API, and the font host. On a 2000ms-RTT connection each one costs
+     a DNS lookup, a TCP handshake and a TLS handshake before its first byte -
+     roughly six seconds of nothing, serially, discovered only when a module
+     deep in the graph asks for it. Warm them while the HTML is still parsing. -->
+<link rel="preconnect" href="https://esm.sh" crossorigin />
+<link rel="preconnect" href="https://ybddogqphinruyunnuwx.supabase.co" crossorigin />
+<link rel="preconnect" href="https://rsms.me" crossorigin />
+<link rel="dns-prefetch" href="https://esm.sh" />
+<link rel="dns-prefetch" href="https://ybddogqphinruyunnuwx.supabase.co" />
+
+<!-- The module graph is discovered one hop at a time: index.html finds main.js,
+     main.js finds sb.js, sb.js finds esm.sh. Naming the first layer here turns
+     that chain into one parallel fetch. Only modules on the path to a painted
+     message are listed - a preload for something not needed yet is a request
+     competing with the ones that are. -->
+<link rel="modulepreload" href="./js/main.js" />
+<link rel="modulepreload" href="./js/sb.js" />
+<link rel="modulepreload" href="./js/config.js" />
+<link rel="modulepreload" href="./js/store.js" />
+<link rel="modulepreload" href="./js/util.js" />
+<link rel="modulepreload" href="./js/api.js" />
+<link rel="modulepreload" href="./js/ui.js" />
+<link rel="modulepreload" href="./js/icons.js" />
+<link rel="modulepreload" href="./js/core/auth.js" />
+<link rel="modulepreload" href="./js/core/channels.js" />
+<link rel="modulepreload" href="./js/core/messages.js" />
+<link rel="modulepreload" href="./js/core/workspace.js" />
+<link rel="modulepreload" href="./js/lib/pagecache.js" />
+<link rel="modulepreload" href="https://esm.sh/@supabase/supabase-js@2.58.0" />
 <link rel="icon" href="./icons/icon-192.png" />
 <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />

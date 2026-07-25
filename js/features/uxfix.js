@@ -19,7 +19,7 @@ import { store, bus, nameOf } from '../store.js';
 import { $, el, esc, plain, debounce, relTime } from '../util.js';
 import { icon } from '../icons.js';
 import { table } from '../api.js';
-import { avatarHtml } from '../core/messages.js';
+import { avatarHtml, applyEdit } from '../core/messages.js';
 import { openChannel } from '../core/channels.js';
 
 // --------------------------------------------------------------------------
@@ -76,14 +76,17 @@ const COPY = [
 
 function fixCopy(root) {
   if (!root || !isTouch()) return;
+  // Marked whether or not anything was replaced. Before, a node that did not
+  // match was re-tested on every single pass, and pass() runs on every mutation
+  // of the message list - which on a phone means re-scanning every .muted node
+  // in fifty messages a few times a second.
   for (const n of root.querySelectorAll('.empty, .muted')) {
     if (n.dataset.uxCopy) continue;
+    n.dataset.uxCopy = '1';
     const before = n.textContent || '';
     let after = before;
     for (const [re, to] of COPY) after = after.replace(re, to);
-    if (after === before) continue;
-    n.dataset.uxCopy = '1';
-    n.textContent = after;
+    if (after !== before) n.textContent = after;
   }
 }
 
@@ -119,7 +122,7 @@ function humanizeNode(root) {
 // ==========================================================================
 let retryChannelId = null;
 
-function renderLoadFailure(list) {
+function renderLoadFailure(list, notice) {
   const c = store.current;
   retryChannelId = c?.id || null;
   const card = el('div', 'ux-fail');
@@ -130,8 +133,13 @@ function renderLoadFailure(list) {
   const b = el('button', 'sm', 'Try again');
   b.onclick = () => { if (retryChannelId) bus.emit('channel:request', { channelId: retryChannelId }); };
   card.appendChild(b);
-  list.innerHTML = '';
-  list.appendChild(card);
+  // Swap the corpse for the card IN PLACE. This used to be `list.innerHTML = ''`
+  // followed by an append, which froze the whole app: bookmarks.js keeps its own
+  // MutationObserver on #messages and re-inserts its bar the moment it is
+  // removed, so wiping the list started a two-observer ping-pong that never let
+  // the microtask queue drain. A phone with no signal locked up solid.
+  if (notice && notice.parentElement === list) notice.replaceWith(card);
+  else list.appendChild(card);
 }
 
 // ==========================================================================
@@ -166,6 +174,34 @@ const loadingStub = (host) => [...(host?.children || [])].find((n) =>
   n.classList?.contains('pad') && n.classList.contains('muted') &&
   /^(loading|searching)/i.test((n.textContent || '').trim()));
 
+// A MutationObserver that writes to the DOM it observes is a freeze hazard by
+// construction, and it does not even need a bug of its own: any OTHER module
+// with an observer on the same node that restores what this one changed
+// produces a two-party loop that never lets the microtask queue drain, and the
+// tab locks up with no error and no way out. That happened - see the comment on
+// renderLoadFailure - and on a phone with no signal it is unrecoverable.
+//
+// So the writes are behind a breaker. Nothing legitimate calls back 250 times in
+// a second: a whole channel render is ONE callback, because the observer batches
+// its records. If the breaker ever trips the app simply reverts to core's own
+// behaviour, which is worse-looking and completely alive.
+let armed = true;
+function guarded(fn) {
+  let hits = 0;
+  let since = 0;
+  return (...a) => {
+    if (!armed) return undefined;
+    const now = Date.now();
+    if (now - since > 1000) { since = now; hits = 0; }
+    if (++hits > 250) {
+      armed = false;
+      console.warn('[uxfix] mutation storm - decorations disabled for this session');
+      return undefined;
+    }
+    return fn(...a);
+  };
+}
+
 function watchLoading() {
   const list = $('messages');
   const panel = $('panelContent');
@@ -183,13 +219,17 @@ function watchLoading() {
   // A whole list that is nothing but a failure notice is a failed load, not an
   // empty channel. Matches both the raw exception core paints and the friendlier
   // sentence offline.js substitutes, because neither offers a way out.
-  // Not keyed on .empty: three different things render a failure sentence into
-  // this list - openChannel's own catch, the topics nav section and the
-  // bookmarks bar - and only one of them uses that class. The check only runs
-  // when the list holds no messages at all, so a real message cannot match.
+  //
+  // Scoped hard to the two placeholder classes core uses, and to nodes with no
+  // id. Anything else in this list belongs to another feature - bookmarks.js
+  // mounts #bmkBar here and re-inserts it from its OWN MutationObserver the
+  // instant it is removed. Removing another module's node from inside an
+  // observer is how you build an infinite loop out of two correct programs.
   const FAIL_RE = /no connection|check your connection|needs the internet|could not reach/i;
-  const isFailureNotice = (n) => !n.classList?.contains('msg') &&
-    !n.classList?.contains('ux-fail') &&
+  const isPlaceholder = (n) => n.nodeType === 1 && !n.id &&
+    (n.classList.contains('empty') || (n.classList.contains('muted') && n.classList.contains('pad')));
+  const isFailureNotice = (n) => isPlaceholder(n) &&
+    !n.classList.contains('ux-fail') &&
     (n.textContent || '').trim().length < 240 &&
     (looksRaw(n.textContent || '') || FAIL_RE.test(n.textContent || ''));
 
@@ -198,10 +238,10 @@ function watchLoading() {
     swap(panel, panelSkeleton());
     if (list && !list.querySelector('.msg')) {
       const notices = [...list.children].filter(isFailureNotice);
-      // Two sources append a failure notice into this list - openChannel's own
-      // catch and the topics nav - so the second one lands after the card has
-      // replaced the first. Two copies of the same apology is worse than one.
-      if (notices.length && !list.querySelector('.ux-fail')) renderLoadFailure(list);
+      if (notices.length && !list.querySelector('.ux-fail')) renderLoadFailure(list, notices[0]);
+      // Two sources can append a placeholder into this list, so the second one
+      // lands after the card has replaced the first. Two copies of the same
+      // apology is worse than one. Only ever our own placeholder classes.
       else for (const n of notices) n.remove();
     }
     humanizeNode(list);
@@ -210,7 +250,7 @@ function watchLoading() {
     labelIconButtons(panel);
   };
 
-  const obs = new MutationObserver(pass);
+  const obs = new MutationObserver(guarded(pass));
   if (list) obs.observe(list, { childList: true });
   if (panel) obs.observe(panel, { childList: true, subtree: true });
   const nav = $('navExtra');
@@ -245,8 +285,20 @@ const SVG_OK = new Set(['svg', 'path', 'circle', 'rect', 'line', 'polyline', 'po
 // Where the menu was actually asked for. ui.js has the event and this does not,
 // so the coordinates are captured on the way past.
 let lastPointer = { x: 0, y: 0 };
-document.addEventListener('pointerdown', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; }, true);
-document.addEventListener('contextmenu', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; }, true);
+// Only remember a real position. A synthetic contextmenu - dispatched by a
+// feature module, by an assistive technology, or by the keyboard path below -
+// can arrive with no coordinates at all, and `undefined` propagated straight
+// through Math.min into `style.top = "NaNpx"`, which the browser discards. The
+// menu then fell back to its static position, which for a fixed element
+// appended to <body> is directly below the app: entirely off the bottom of the
+// screen, with no scrollbar to reach it.
+const remember = (e) => {
+  if (Number.isFinite(e.clientX) && Number.isFinite(e.clientY) && (e.clientX || e.clientY)) {
+    lastPointer = { x: e.clientX, y: e.clientY };
+  }
+};
+document.addEventListener('pointerdown', remember, true);
+document.addEventListener('contextmenu', remember, true);
 
 function sanitizeIcon(markup) {
   const t = document.createElement('template');   // inert: nothing loads or runs
@@ -313,10 +365,15 @@ function repairCtxMenu(menu) {
   // both edges this time.
   requestAnimationFrame(() => {
     const r = menu.getBoundingClientRect();
-    const x = Math.max(8, Math.min(lastPointer.x, window.innerWidth - r.width - 8));
-    const y = Math.max(8, Math.min(lastPointer.y, window.innerHeight - r.height - 8));
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // A clamp is only as good as its inputs, and an anchor that is off screen or
+    // not a number has to end somewhere sensible rather than nowhere.
+    const fit = (want, size, limit) => {
+      const n = Number.isFinite(want) ? want : Math.round((limit - size) / 2);
+      return Math.max(8, Math.min(n, Math.max(8, limit - size - 8)));
+    };
+    menu.style.left = fit(lastPointer.x, r.width, vw) + 'px';
+    menu.style.top = fit(lastPointer.y, r.height, vh) + 'px';
   });
 
   menu.addEventListener('keydown', (e) => {
@@ -346,6 +403,7 @@ let jumpTimer = null;
 
 function armUnreadJump(channelId) {
   clearTimeout(jumpTimer);
+  quietList();                       // do not read the whole page out loud
   document.querySelector('.ux-unread-top')?.remove();
   if (!channelId) { jumpArmed = null; return; }
   // store.unread still holds the pre-open value here: channel:open is emitted
@@ -440,18 +498,25 @@ function wireChannelList() {
   host.setAttribute('role', 'list');
   apply();
 
+  // wireChannelList runs again on every `workspace` and `channels` event, and
+  // without this guard each of those attached ANOTHER observer to the same node
+  // - so after five Space switches every sidebar repaint ran apply() five times.
+  // A volunteer in two organisations switches Space all day.
+  if (host.dataset.uxObserved) return;
+  host.dataset.uxObserved = '1';
+
   // refreshUnread() rebuilds this list with innerHTML four times a minute, which
   // destroys focus mid-interaction. Restoring it is the reachable half; the
   // other half - diffing rows instead of replacing them - is a change to
   // js/core/channels.js:438.
-  new MutationObserver(() => {
+  new MutationObserver(guarded(() => {
     apply();
     if (!lastFocusedChannel) return;
     if (document.activeElement && document.activeElement !== document.body) return;
     const sel = `[data-ch="${CSS.escape(lastFocusedChannel)}"],[data-dm="${CSS.escape(lastFocusedChannel)}"]`;
     const back = host.querySelector(sel);
     if (back) { back.tabIndex = 0; back.focus(); }
-  }).observe(host, { childList: true, subtree: true });
+  })).observe(host, { childList: true, subtree: true });
 }
 
 // ==========================================================================
@@ -540,6 +605,38 @@ function decorateMessage(r) {
   if (who || body) r.setAttribute('aria-label', `${who || 'Message'}: ${plain(body || '', 120)}`);
 }
 
+// A live region is what makes an arriving message audible. It is also what
+// makes a channel switch read FIFTY messages aloud, because opening a channel
+// replaces the whole region at once and every one of those rows is an
+// "addition". So the region is silenced while a page is being painted and comes
+// back once the list has been quiet for half a second. Announcing everything is
+// worse than announcing nothing: it is the behaviour that makes people turn the
+// screen reader off.
+let liveTimer = null;
+let quietSince = 0;
+function goLive() {
+  const list = $('messages');
+  if (list) list.setAttribute('aria-live', 'polite');
+}
+function quietList() {
+  const list = $('messages');
+  if (!list) return;
+  list.setAttribute('aria-live', 'off');
+  quietSince = Date.now();
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(goLive, 600);
+}
+function nudgeLive() {
+  const list = $('messages');
+  if (!list || list.getAttribute('aria-live') !== 'off') return;
+  // Waiting for a quiet gap is right for the burst of a page paint and wrong
+  // forever: a busy channel would keep pushing the deadline out and never
+  // announce anything again. Three seconds is the hard ceiling on the silence.
+  if (Date.now() - quietSince > 3000) { clearTimeout(liveTimer); goLive(); return; }
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(goLive, 600);
+}
+
 function wireMessageList() {
   const list = $('messages');
   if (!list || list.dataset.uxWired) return;
@@ -574,7 +671,7 @@ function wireMessageList() {
     }
   });
 
-  new MutationObserver((recs) => {
+  new MutationObserver(guarded((recs) => {
     for (const rec of recs) {
       for (const n of rec.addedNodes) {
         if (n.nodeType !== 1) continue;
@@ -588,8 +685,9 @@ function wireMessageList() {
         labelIconButtons(n.querySelectorAll ? n : list);
       }
     }
+    nudgeLive();
     tryUnreadJump();
-  }).observe(list, { childList: true, subtree: true });
+  })).observe(list, { childList: true, subtree: true });
 
   for (const r of list.querySelectorAll('.msg')) decorateMessage(r);
   list.addEventListener('scroll', debounce(paintUnreadPill, 120));
@@ -634,7 +732,7 @@ function trapModal(back) {
 // One observer for everything appended straight to <body>: the toast host, the
 // long-press menu and every modal.
 function wireBodyAdditions() {
-  new MutationObserver((recs) => {
+  new MutationObserver(guarded((recs) => {
     for (const rec of recs) {
       for (const n of rec.addedNodes) {
         if (n.nodeType !== 1) continue;
@@ -650,7 +748,7 @@ function wireBodyAdditions() {
         } catch { /* never let a decoration break the thing it decorates */ }
       }
     }
-  }).observe(document.body, { childList: true });
+  })).observe(document.body, { childList: true });
 }
 
 function addSkipLink() {
@@ -737,17 +835,29 @@ function wireAuthEnter() {
 // Bound to double-click and to the E key on a focused row rather than a new
 // button, because the desktop action bar is already too wide.
 // ==========================================================================
-function cancelInlineEdit(box) {
+// `restore` puts the message back exactly as it was, which is right after a
+// cancel and WRONG after a save: the snapshot is the text the author just
+// replaced. It used to run on both paths, so a successful edit repainted the old
+// wording over the new one and only came right if the realtime broadcast
+// happened to land afterwards - which on a slow connection it does not. The edit
+// looked like it had silently failed.
+function closeInlineEdit(box, { restore = true, text = null } = {}) {
   const row = box.closest('.msg');
   const html = box.dataset.uxHtml;
   const target = row?.querySelector('.body');
   box.remove();
   if (target) {
-    if (html != null) target.innerHTML = html;
+    if (restore && html != null) target.innerHTML = html;
     target.style.display = '';
   }
+  // Paint the new text ourselves through core's own renderer, so it is escaped
+  // and formatted the same way and carries the (edited) marker. The realtime
+  // event that follows runs the identical function, so this is idempotent.
+  if (!restore && text != null && row?.dataset.id) applyEdit(row.dataset.id, text);
   row?.focus?.();
 }
+
+const cancelInlineEdit = (box) => closeInlineEdit(box, { restore: true });
 
 function startInlineEdit(row, api) {
   if (!row || row.querySelector('.ux-edit')) return;
@@ -773,12 +883,15 @@ function startInlineEdit(row, api) {
     const text = ta.value.trim();
     if (!text || text === m.body_text) { cancelInlineEdit(box); return; }
     ta.disabled = true;
+    hint.textContent = 'Saving…';
     try {
       await api.edit(id, text);
-      cancelInlineEdit(box);
+      closeInlineEdit(box, { restore: false, text });
     } catch (e) {
       ta.disabled = false;
       ta.focus();
+      // The text the author typed is still in the box, so nothing is lost and
+      // Enter tries again. That is the whole contract on a bad connection.
       hint.textContent = humanError(e.message);
     }
   };
@@ -948,15 +1061,33 @@ function threePartEmpty({ what, how, action, onAction, ico }) {
 const RANK = { Owner: 0, Admin: 1, Moderator: 2, Member: 3 };
 const ADMINISTRATOR = 1n << 40n;
 
+// Three table reads, one of which is every member row in the Space, on every
+// open of the panel. Cached per Space: role assignments change a handful of
+// times a year and the panel gets opened several times a day, on somebody's own
+// mobile data. A short life keeps a promotion from taking a reload to show up.
+const ROLE_TTL = 5 * 60 * 1000;
+let roleCache = { ws: null, at: 0, map: null };
+
 async function memberRoleMap() {
   const out = new Map();
-  if (!store.ws) return out;
+  if (!store.ws) return { roles: out, complete: false };
+  if (roleCache.ws === store.ws.id && Date.now() - roleCache.at < ROLE_TTL && roleCache.map) {
+    return { roles: roleCache.map, complete: true };
+  }
+  let got = false;
   try {
     const [members, links, roles] = await Promise.all([
       table('workspace_members', (q) => q.eq('workspace_id', store.ws.id)),
       table('member_roles', (q) => q.eq('workspace_id', store.ws.id)),
       table('roles', (q) => q.eq('workspace_id', store.ws.id)),
     ]);
+    // A Space always has at least one member row, so an empty answer means the
+    // read failed - offline, most likely. Do not cache that for five minutes.
+    // PostgREST stops at 1000 rows, and a truncated membership list must NOT be
+    // used to filter the panel: leaving a real colleague out of "Members" is a
+    // worse answer than leaving a stranger in. Two NGOs will never reach this,
+    // but the failure mode if they did would be silent and confusing.
+    got = members.length > 0 && members.length < 1000;
     const byRole = new Map(roles.map((r) => [r.id, r]));
     for (const m of members) {
       out.set(m.user_id, m.member_type === 'moderator' ? 'Moderator' : 'Member');
@@ -969,9 +1100,15 @@ async function memberRoleMap() {
       try { admin = (BigInt(r.permissions || 0) & ADMINISTRATOR) !== 0n; } catch { admin = false; }
       if (admin) out.set(l.user_id, 'Admin');
     }
-    if (store.ws.owner_id) out.set(store.ws.owner_id, 'Owner');
+    // public.workspaces has no owner_id - the column is created_by. Reading a
+    // name that is not there meant the Owner pill never rendered once, which is
+    // the single label the panel exists to show: an ordinary member cannot read
+    // member_roles at all (RLS), so without this nobody in the list is marked.
+    const owner = store.ws.created_by || store.ws.owner_id;
+    if (owner) out.set(owner, 'Owner');
   } catch { /* roles are a nicety; the list still has to render */ }
-  return out;
+  if (got) roleCache = { ws: store.ws.id, at: Date.now(), map: out };
+  return { roles: out, complete: got };
 }
 
 function registerMembersPanel(ui) {
@@ -980,8 +1117,16 @@ function registerMembersPanel(ui) {
     title: 'Members',
     async render(body) {
       body.innerHTML = panelSkeleton();
-      const roles = await memberRoleMap();
-      const all = [...store.profiles.values()];
+      const { roles, complete } = await memberRoleMap();
+      // store.profiles is a global cache of everyone this session has ever seen
+      // - across every Space, every DM and every search result. Listing it under
+      // the heading "Members" was wrong: measured on a seeded workspace it
+      // showed 1237 people for a Space with 1000 members. Filter to the actual
+      // membership when we could read it, and fall back to the cache when we
+      // could not, because a list that is slightly too long beats an empty panel.
+      const all = complete
+        ? [...store.profiles.values()].filter((p) => roles.has(p.id))
+        : [...store.profiles.values()];
 
       body.innerHTML = '';
       const search = el('input');

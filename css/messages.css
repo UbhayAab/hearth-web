@@ -365,6 +365,24 @@
   font-weight: var(--t-medium);
 }
 
+/* A send that did not land. Deliberately NOT danger-coloured: the message is
+   still on screen, still readable, and one button fixes it. Red here reads as
+   "you have lost something", which is not what happened. */
+.send-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-1);
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+}
+.send-state .ico { width: 13px; height: 13px; flex: none; }
+.send-state button {
+  padding: var(--s-1) var(--s-3);
+  font-size: var(--t-xs);
+  border-radius: var(--r-sm);
+}
+
 /* ---------------------------------------------------------------- syntax
    The old palette was hard-coded for a dark background and went unreadable in
    light mode. These derive from the theme's own semantic colours and are then

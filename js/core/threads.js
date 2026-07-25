@@ -8,10 +8,9 @@
 import { api } from '../api.js';
 import { store, bus, nameOf } from '../store.js';
 import { $, el, esc, plain, relTime } from '../util.js';
-import { subscribe, unsubscribe } from '../sb.js';
 import { registerPanel, openPanel, closePanel, toast, confirmModal, formModal, currentPanel } from '../ui.js';
-import { buildMessage, appendMessage, loadReactions, claimMessage, applyEdit, applyDelete,
-  applyReaction, refreshThreadIndicator, avatarHtml, renderedIn } from './messages.js';
+import { buildMessage, appendMessage, loadReactions, claimMessage,
+  refreshThreadIndicator, avatarHtml, renderedIn } from './messages.js';
 
 export const threadState = { id: null, root: null, following: false, maxSeq: 0 };
 
@@ -33,28 +32,28 @@ export async function openThread(rootMessage) {
   threadState.id = t.threadId;
   threadState.root = rootMessage;
   await openPanel('thread', { threadId: t.threadId, root: rootMessage });
-  subscribeThread(t.threadId);
   bus.emit('thread:open', { threadId: t.threadId, root: rootMessage });
 }
 
-function subscribeThread(threadId) {
-  subscribe('thread', 'th:' + threadId, {
-    msg: (m) => {
-      if (threadState.id !== threadId) return;
-      const host = $('threadMsgs');
-      // Same reason as the channel side: an also-send reply is claimed by
-      // whichever container saw it first, so the panel asks itself.
-      if (!host || renderedIn(host, m.id)) return;
-      store.seen.add(m.id);
-      appendMessage(host, m, 'thread');
-      host.scrollTop = host.scrollHeight;
-      threadState.maxSeq = Math.max(threadState.maxSeq, m.seq || 0);
-    },
-    edit: (p) => applyEdit(p.id, p.body_text),
-    delete: (p) => applyDelete(p.message_id),
-    reaction: (p) => applyReaction(p),
-  });
-}
+// Thread replies arrive on the CHANNEL topic, because nothing anywhere in the
+// server ever emits to `th:` - the subscription that used to be here was to a
+// topic no publisher has ever written to, so a reply appeared live only for the
+// person who typed it while the indicator said "3 replies" over a panel showing
+// two. Core already forwards every arriving message (live or healed) as
+// 'message:new'; that is the real feed, so listen to it. This also gives back
+// one of the hundred realtime channels per thread opened.
+bus.on('message:new', ({ msg }) => {
+  if (!msg || !threadState.id || msg.thread_id !== threadState.id) return;
+  const host = $('threadMsgs');
+  // Same reason as the channel side: an also-send reply is claimed by whichever
+  // container saw it first, so the panel asks itself.
+  if (!host || renderedIn(host, msg.id)) return;
+  store.seen.add(msg.id);
+  appendMessage(host, msg, 'thread');
+  host.scrollTop = host.scrollHeight;
+  threadState.maxSeq = Math.max(threadState.maxSeq, msg.seq || 0);
+  api.markThreadRead(threadState.id, threadState.maxSeq).catch(() => {});
+});
 
 // ------------------------------------------------------------------ the panel
 registerPanel({
@@ -63,7 +62,6 @@ registerPanel({
   onClose() {
     threadState.id = null;
     threadState.root = null;
-    unsubscribe('thread');
   },
   async render(body, ctx) {
     const threadId = ctx.threadId || threadState.id;

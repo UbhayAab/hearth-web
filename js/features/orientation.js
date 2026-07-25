@@ -45,7 +45,10 @@ async function load(channelId, force = false) {
 }
 
 // ------------------------------------------------------------------ the card
-function buildCard(g, { firstVisit }) {
+// `dismissable` is false inside the side panel: a "Close" that deletes the card
+// and leaves an empty panel behind is a dead end, and the panel already has its
+// own close button in the header.
+function buildCard(g, { firstVisit, dismissable = true }) {
   const card = el('div', CLS + '-card' + (firstVisit ? ' ' + CLS + '-first' : ''));
   const hasGuide = !!(g.purpose || g.body);
 
@@ -110,7 +113,7 @@ function buildCard(g, { firstVisit }) {
     foot.appendChild(ed);
   }
 
-  if (!firstVisit) {
+  if (!firstVisit && dismissable) {
     const cl = el('button', 'sm ghost', 'Close');
     cl.type = 'button';
     cl.onclick = () => card.remove();
@@ -275,7 +278,7 @@ async function renderPanel(body, ctx = {}) {
   catch (e) { body.innerHTML = `<div class="empty">${esc(humanError(e))}</div>`; return; }
 
   body.innerHTML = '';
-  body.appendChild(buildCard(g, { firstVisit: false }));
+  body.appendChild(buildCard(g, { firstVisit: false, dismissable: false }));
 
   const meta = el('div', 'muted ' + CLS + '-meta');
   meta.innerHTML = g.updated_at
@@ -314,17 +317,19 @@ function style() {
   border:1px solid var(--c-border);border-radius:var(--r-lg);background:var(--c-surface-2)}
 .${CLS}-card.${CLS}-first{border-color:var(--c-accent);box-shadow:var(--e-2)}
 .${CLS}-head{display:flex;align-items:center;gap:var(--s-4);flex-wrap:wrap}
+/* Tint for the signal, --c-text for the label: --c-accent on --c-accent-quiet
+   fails AA at 10.5px in two of the three themes. */
 .${CLS}-tag{font-size:var(--t-2xs);font-weight:var(--t-black);letter-spacing:.5px;
   padding:var(--s-1) var(--s-3);border-radius:var(--r-xs);
-  background:var(--c-accent-quiet);color:var(--c-accent)}
+  background:var(--c-accent-quiet);color:var(--c-text)}
 .${CLS}-name{font-weight:var(--t-bold);color:var(--c-text)}
 .${CLS}-purpose{margin-top:var(--s-4);font-size:var(--t-md);color:var(--c-text);line-height:var(--t-snug)}
 .${CLS}-body{margin-top:var(--s-4);color:var(--c-text-2);font-size:var(--t-base);line-height:var(--t-body)}
 .${CLS}-body ul,.${CLS}-body ol{padding-left:var(--s-7);margin:var(--s-3) 0}
-.${CLS}-empty{margin-top:var(--s-4);color:var(--c-text-3);font-size:var(--t-sm)}
+.${CLS}-empty{margin-top:var(--s-4);color:var(--c-text-2);font-size:var(--t-sm)}
 .${CLS}-sec{margin-top:var(--s-5);font-size:var(--t-2xs);font-weight:var(--t-black);
-  letter-spacing:.5px;color:var(--c-text-3);text-transform:uppercase}
-.${CLS}-owed{color:var(--c-warn)}
+  letter-spacing:.5px;color:var(--c-text-2);text-transform:uppercase}
+.${CLS}-owed{color:var(--c-text)}
 .${CLS}-pins{display:flex;flex-direction:column;gap:var(--s-2);margin-top:var(--s-3)}
 .${CLS}-pin{display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:44px;
   text-align:left;padding:var(--s-3) var(--s-4);border:1px solid var(--c-border-subtle);
@@ -336,11 +341,30 @@ function style() {
 .${CLS}-foot{margin-top:var(--s-5);flex-wrap:wrap;gap:var(--s-3);align-items:center}
 .${CLS}-foot button{min-height:40px}
 .${CLS}-got{padding:var(--s-3) var(--s-6);border:0;border-radius:var(--r-md);
-  font-weight:var(--t-semibold);background:var(--c-accent);color:var(--c-accent-text)}
+  font-weight:var(--t-semibold);background:var(--c-accent);color:var(--c-text-inverse)}
 .${CLS}-meta{margin-top:var(--s-4);font-size:var(--t-xs);padding:0 var(--s-2)}
 /* inside the welcome dialog the modal already supplies the frame */
 .${CLS}-inmodal{margin:0;border:0;padding:0;background:none;max-width:none}
-.${CLS}-inmodal .${CLS}-purpose{margin-top:0}`;
+.${CLS}-inmodal .${CLS}-purpose{margin-top:0}
+
+/* THE FIRST-VISIT BANNER had no styles at all - showWelcome() built .ori-banner
+   and .ori-bannerhead and nothing in this file or in css/ ever matched them. On a
+   phone that meant the title sat flush against the screen edge with a stray x
+   floating beside it, on the one screen a new volunteer sees first. It is a band
+   across the top of the conversation, so it gets a band's frame: its own surface,
+   a rule underneath, and the same horizontal padding as the card it wraps. */
+.${CLS}-banner{flex:none;padding:var(--s-4) var(--s-5) var(--s-5);
+  background:var(--c-surface-2);border-bottom:1px solid var(--c-border);
+  max-height:52vh;overflow-y:auto}
+.${CLS}-bannerhead{display:flex;align-items:center;gap:var(--s-4);
+  font-size:var(--t-md);color:var(--c-text)}
+.${CLS}-bannerhead button{margin-left:auto;flex:none;
+  min-width:40px;min-height:40px;border-radius:var(--r-md)}
+.${CLS}-bannerhead svg{width:16px;height:16px}
+/* no box inside a box: the banner is already the frame */
+.${CLS}-banner .${CLS}-card{margin:var(--s-3) 0 0;padding:0;border:0;
+  background:none;box-shadow:none;max-width:none}
+.${CLS}-banner>button{margin-top:var(--s-4);min-height:40px}`;
   document.head.appendChild(s);
 }
 
@@ -350,6 +374,7 @@ export function register({ ui }) {
   style();
 
   bus.on('channel:open', ({ channel }) => { scheduleBind(); onChannelOpen(channel); });
+  bus.on('channel:subscribed', scheduleBind);
   scheduleBind();
 
   ui.registerPanel({

@@ -127,7 +127,10 @@ function section(host, title, explain, rows, rowHtml, emptyText, extra) {
   const list = Array.isArray(rows) ? rows : [];
   host.appendChild(el('h4', 'sec', `${esc(title)} (${list.length})`));
   host.appendChild(el('p', 'muted ' + CLS + '-explain', esc(explain)));
-  if (!list.length) { host.appendChild(el('div', 'empty', esc(emptyText))); return; }
+  // Not the shell's `.empty`, which centres and pads for a whole panel. Three of
+  // those stacked in one report is a screen and a half of dead space between the
+  // three lists the admin came to compare.
+  if (!list.length) { host.appendChild(el('div', CLS + '-none', esc(emptyText))); return; }
 
   const draw = (from, to) => {
     for (const r of list.slice(from, to)) {
@@ -183,7 +186,9 @@ function style() {
 .${CLS}-n{font-size:var(--t-xl);font-weight:var(--t-bold);font-variant-numeric:tabular-nums;
   color:var(--c-text)}
 .${CLS}-warn .${CLS}-n{color:var(--c-danger)}
-.${CLS}-l{font-size:var(--t-2xs);color:var(--c-text-3);line-height:var(--t-tight)}
+/* --c-text-3 measures 2.75:1 on surface-2 in the light theme. At 10.5px these
+   labels are the smallest text in the panel; --c-text-2 is 5.38-6.72. */
+.${CLS}-l{font-size:var(--t-2xs);color:var(--c-text-2);line-height:var(--t-tight)}
 .${CLS}-ctrl{flex-wrap:wrap;align-items:center;margin-bottom:var(--s-5);font-size:var(--t-xs)}
 .${CLS}-ctrl button{min-height:34px}
 .${CLS}-explain{font-size:var(--t-xs);margin:calc(-1 * var(--s-2)) 0 var(--s-3);line-height:var(--t-snug)}
@@ -191,7 +196,8 @@ function style() {
 .${CLS}-row button{align-self:flex-start;margin-top:var(--s-2);min-height:36px}
 .${CLS}-sub{font-size:var(--t-xs)}
 .${CLS}-pill{margin-left:var(--s-2);font-size:var(--t-2xs);padding:var(--s-0) var(--s-3);
-  border-radius:var(--r-xs);background:var(--c-surface-3);color:var(--c-text-3)}
+  border-radius:var(--r-xs);background:var(--c-surface-3);color:var(--c-text-2)}
+.${CLS}-none{padding:var(--s-3) 0 var(--s-5);color:var(--c-text-2);font-size:var(--t-sm)}
 .${CLS}-more{width:100%;min-height:40px;margin-bottom:var(--s-4)}
 .${CLS}-gen{margin-top:var(--s-6);font-size:var(--t-2xs);text-align:center}`;
   document.head.appendChild(s);

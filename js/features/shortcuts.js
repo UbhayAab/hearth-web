@@ -148,6 +148,10 @@ export function register(app) {
   // that; Activity is the sane cold start.
   let lastPanel = 'activity';
   bus.on('panel:close', ({ id }) => { if (id) lastPanel = id; });
+  // The shell's help button and the user menu both ask for this by name rather
+  // than reaching into this module.
+  bus.on('shortcuts:open', helpModal);
+  bus.on('shortcuts:show', helpModal);
 
   function togglePanel() {
     const open = ui.currentPanel();

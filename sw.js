@@ -7,7 +7,7 @@
 //    posts SKIP_WAITING.
 //  - The esm.sh dependencies are cached so the app opens offline instead of
 //    hanging on a module import.
-const VERSION = 'soop-v6';
+const VERSION = 'soop-v7';
 const SHELL = VERSION + '-shell';
 const VENDOR = VERSION + '-vendor';
 
@@ -23,6 +23,11 @@ const SHELL_FILES = [
   './css/features.css',
   './css/reading.css',
   './css/shell.css',
+  // Injected by features/uxfix.js rather than linked from index.html, so it is
+  // not discoverable by crawling the document - but it carries the touch-target
+  // floor, the long-press menu layout and the contrast corrections. Without it
+  // in the shell an offline cold start renders those wrong.
+  './css/polish.css',
   './js/shell.js',
   './js/theme.js',
   './js/icons.js',
@@ -39,7 +44,17 @@ const SHELL_FILES = [
   // The outbox has to be reachable with no network - it is the module that
   // replays what the person wrote while they had none.
   './js/features/offline.js',
+  // uxfix owns the long-press menu repair, the failed-load card, the members and
+  // search panels and the keyboard wiring. Offline it is the difference between
+  // a phone that says "could not load, try again" and one that shows a raw
+  // exception where the conversation was, so it belongs in the shell too.
+  './js/features/uxfix.js',
   './js/lib/outbox.js',
+  './js/lib/readcache.js',
+  // The last page of each channel is painted from here BEFORE the network is
+  // touched, so it has to be in the shell or an offline cold start has nothing
+  // to draw.
+  './js/lib/pagecache.js',
   './js/core/auth.js',
   './js/core/workspace.js',
   './js/core/channels.js',

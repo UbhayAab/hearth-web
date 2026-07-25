@@ -273,6 +273,14 @@ async function main() {
   $('btnInvite').onclick = () => inviteDialog();
   $('btnSpaces').onclick = spaceChooser;
   $('btnMembersCount').onclick = () => openPanel('members');
+
+  // Binds the global bar, the channel bar overflow and the user menus. This was
+  // imported but never called for several deploys, which left the search field,
+  // the More menu, both identity menus and 12 of the 16 registered header
+  // buttons completely unclickable - most of the app looked present and did
+  // nothing.
+  initShell();
+  bus.on('invite:open', () => inviteDialog());
   $('installBtn').onclick = () => import('./pwa.js').then((m) => m.promptInstall());
 
   // Mobile: the sidebar is off-canvas until asked for, and any navigation

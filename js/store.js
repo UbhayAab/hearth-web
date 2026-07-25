@@ -29,6 +29,7 @@ export const store = {
   rootThreads: new Map(),   // root message id -> {threadId, count}
   rxn: new Map(),           // message id -> Map(emoji -> Set(user_id))
   cursor: 0,                // highest channel seq applied
+  dmCursor: 0,              // highest DM seq applied in the open conversation
   oldestSeq: null,          // lowest channel seq loaded (for paging up)
   replyTarget: null,
 };
@@ -39,6 +40,7 @@ export function resetChannelState() {
   store.rootThreads.clear();
   store.rxn.clear();
   store.cursor = 0;
+  store.dmCursor = 0;
   store.oldestSeq = null;
   store.replyTarget = null;
 }

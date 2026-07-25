@@ -130,6 +130,13 @@ function mount(msg, row) {
   if (row.dataset.acklMounted === msg.id) return;
   row.dataset.acklMounted = msg.id;
 
+  // Core rewrites row.dataset.id when the server answers an optimistic send but
+  // never re-emits message:render, so a card stamped with the client nonce would
+  // never repaint. Drop any card carrying a different id before adding this one.
+  row.querySelectorAll('.' + CLS + '-card').forEach((n) => {
+    if (n.dataset.ackl !== msg.id) n.remove();
+  });
+
   const body = row.querySelector('.body') || row;
   const card = el('div', CLS + '-card');
   card.dataset.ackl = msg.id;
@@ -223,10 +230,14 @@ function style() {
   border-radius:var(--r-lg);background:var(--c-surface-2);font-size:var(--t-sm)}
 .${CLS}-card.${CLS}-all{border-left-color:var(--c-success)}
 .${CLS}-head{display:flex;align-items:center;gap:var(--s-4);flex-wrap:wrap}
+/* The tint carries the meaning; the label carries the text. --c-warn as a
+   FOREGROUND measures 3.08:1 (light) and 2.83:1 (colorful) against surface-2 and
+   fails AA at 10.5px, so the label takes --c-text (10-14:1 in all three) and the
+   colour signal stays in the background tint and the card's left border. */
 .${CLS}-tag{font-size:var(--t-2xs);font-weight:var(--t-black);letter-spacing:.5px;
   padding:var(--s-1) var(--s-3);border-radius:var(--r-xs);
-  background:var(--c-warn-quiet);color:var(--c-warn)}
-.${CLS}-all .${CLS}-tag{background:var(--c-success-quiet);color:var(--c-success)}
+  background:var(--c-warn-quiet);color:var(--c-text)}
+.${CLS}-all .${CLS}-tag{background:var(--c-success-quiet);color:var(--c-text)}
 .${CLS}-count{font-weight:var(--t-bold);color:var(--c-text)}
 .${CLS}-bar{height:5px;border-radius:var(--r-full);background:var(--c-surface-3);
   overflow:hidden;margin:var(--s-3) 0}
@@ -234,14 +245,17 @@ function style() {
 .${CLS}-all .${CLS}-bar>span{background:var(--c-success)}
 .${CLS}-pending{color:var(--c-text-2);word-break:break-word;line-height:var(--t-snug)}
 .${CLS}-waiting{font-weight:var(--t-semibold);color:var(--c-text)}
-.${CLS}-ok{color:var(--c-success);font-weight:var(--t-semibold)}
+.${CLS}-ok{color:var(--c-text);font-weight:var(--t-semibold)}
 .${CLS}-foot{margin-top:var(--s-4);flex-wrap:wrap;align-items:center}
 .${CLS}-confirm{min-height:36px;padding:var(--s-3) var(--s-6);border-radius:var(--r-md);
-  font-weight:var(--t-semibold);background:var(--c-accent);color:var(--c-accent-text);border:0}
+/* --c-accent-text is white in every theme and lands at 3.16:1 on the dark accent.
+   --c-text-inverse is the token the shell's own primary button uses and clears AA
+   in all three (5.73 / 4.55 / 6.22). */
+  font-weight:var(--t-semibold);background:var(--c-accent);color:var(--c-text-inverse);border:0}
 .${CLS}-confirm:disabled{opacity:.6}
-.${CLS}-done{display:inline-flex;align-items:center;gap:var(--s-2);color:var(--c-success);
+.${CLS}-done{display:inline-flex;align-items:center;gap:var(--s-2);color:var(--c-text-2);
   font-weight:var(--t-semibold)}
-.${CLS}-done svg{width:15px;height:15px}
+.${CLS}-done svg{width:15px;height:15px;color:var(--c-success)}
 .${CLS}-err{color:var(--c-danger)}
 .${CLS}-row{cursor:pointer}
 .${CLS}-rowtop{display:flex;align-items:baseline;gap:var(--s-3);flex-wrap:wrap}
@@ -257,6 +271,7 @@ export function register({ ui }) {
 
   bus.on('message:render', ({ msg, el: row }) => mount(msg, row));
   bus.on('channel:open', scheduleBind);
+  bus.on('channel:subscribed', scheduleBind);
   scheduleBind();
 
   // A reminder that arrives while the app is open should light up the card, not

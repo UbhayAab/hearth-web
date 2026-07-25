@@ -322,6 +322,8 @@ export function register({ ui }) {
   bus.on('message:render', ({ msg, el: row }) => mount(msg, row));
 
   bus.on('workspace', scheduleBind);
+  // core replaces the 'ws' channel object on every recovered drop too
+  bus.on('realtime:subscribed', ({ key }) => { if (key === 'ws') scheduleBind(); });
   scheduleBind();
 
   ui.registerPanel({

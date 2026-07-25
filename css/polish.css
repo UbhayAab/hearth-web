@@ -42,6 +42,14 @@
 .ux-fail-title { color: var(--c-text); font-weight: var(--t-semibold); }
 .ux-fail-sub { color: var(--c-text-2); font-size: var(--t-sm); line-height: var(--t-loose); }
 
+/* The bookmarks bar renders its OWN "no connection" sentence into this list, so
+   a failed load showed the same apology twice, one above the other. Its node
+   belongs to another module and removing it from a MutationObserver is what
+   froze the app, so it is occluded rather than deleted: a style change starts no
+   observer war, and there is nothing to bookmark on a screen that did not load.
+   The bar comes straight back when the channel does. */
+#messages:has(> .ux-fail) > #bmkBar { display: none; }
+
 
 /* ============================================================================
    2. TOUCH TARGETS
@@ -114,6 +122,14 @@
 .ctx-item:focus-visible {
   outline: 2px solid var(--c-accent);
   outline-offset: -2px;
+}
+/* components.css sets 34px, which is fine for a mouse and under the app's own
+   44px touch floor. This is the only way to reach reply-in-thread, quote, pin
+   and mark-unread on a phone, so of everything in the product this list is the
+   one that must not be mis-tapped. Measured before: 34px rows on touch. */
+@media (hover: none) {
+  .ctx-item { min-height: 44px; }
+  .ctxmenu { min-width: min(260px, calc(100vw - var(--s-8))); }
 }
 
 
@@ -212,9 +228,16 @@
    A margin moves the scroll box itself, so the band the pill sits in is clear
    at every scroll position. */
 /* 60px, measured: the pill sits at top 12 and is 44 tall on a phone, so 48 left
-   its bottom edge 8px inside the list. */
-section.msgs:has(> .sc-jump:not(.hidden)) #messages,
-section.msgs:has(> .ux-unread-top) #messages { margin-top: calc(var(--s-11) + var(--s-5)); }
+   its bottom edge 8px inside the list.
+
+   Applied to the FIRST child rather than to #messages by name. Both pills are
+   appended last, so the first child is whatever is actually at the top of the
+   column - and that is not always the message list: the channel guide mounts a
+   welcome banner above it. Reserving on #messages alone left the pill painted
+   straight across "Welcome to #general" on a 390px screen, which is the first
+   thing a new volunteer ever sees. */
+section.msgs:has(> .sc-jump:not(.hidden)) > :first-child,
+section.msgs:has(> .ux-unread-top) > :first-child { margin-top: calc(var(--s-11) + var(--s-5)); }
 
 /* The bottom pill is transient - it appears when a message arrives while you
    are reading further up - so it gets the backdrop and the scroll padding but
@@ -586,11 +609,20 @@ aside#panel:not(.hidden) {
 :root:not([data-theme]) .ob-broke { color: color-mix(in srgb, var(--c-danger) 72%, black); }
 
 /* Same story for the coordination cards: a small uppercase tag and a one-line
-   summary, both on an accent or a quiet grey that does not survive 11px. */
+   summary, both on an accent or a quiet grey that does not survive 11px.
+   .ori-tag is the "ABOUT THIS CHANNEL" / "WELCOME" chip on the channel guide -
+   measured 4.09:1 on light, needs 4.5 - and it is the first thing a new
+   volunteer sees on their first open of a channel. */
 :root[data-theme="light"] .ackl-tag,
 :root[data-theme="colorful"] .ackl-tag,
 :root[data-theme="light"] .frm-tag,
-:root[data-theme="colorful"] .frm-tag { color: color-mix(in srgb, currentcolor 74%, black); }
+:root[data-theme="colorful"] .frm-tag,
+:root[data-theme="light"] .ori-tag,
+:root[data-theme="colorful"] .ori-tag { color: color-mix(in srgb, currentcolor 74%, black); }
+
+/* --c-text-3 is 2.90:1 on light for any text at all, and these two are words. */
+.ori-sec,
+.ori-empty { color: var(--c-text-2); }
 
 .frm-qs { color: var(--c-text-2); }
 :root[data-theme="light"] .frm-fill,
