@@ -101,7 +101,7 @@ async function snippetDialog(prefillTitle = '') {
     wide: true,
     fields: [
       { name: 'title', label: 'Title', required: true, value: prefillTitle,
-        placeholder: 'Retry wrapper' },
+        placeholder: 'Soop wrapper' },
       { name: 'language', label: 'Language', type: 'select',
         options: LANGUAGES.map((l) => ({ value: l, label: l })) },
       { name: 'code', label: 'Code', type: 'textarea', rows: 12, required: true,

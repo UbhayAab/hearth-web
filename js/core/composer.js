@@ -260,7 +260,7 @@ export async function send() {
     row.classList.remove('pending');
     row.classList.add('failed');
     const body = row.querySelector('.body');
-    const retry = el('button', 'sm ghost', 'Retry');
+    const retry = el('button', 'sm ghost', 'Soop');
     retry.onclick = () => {
       row.remove();
       store.seen.delete('n:' + nonce);

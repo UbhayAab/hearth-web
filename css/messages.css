@@ -165,6 +165,14 @@
    ========================================================================= */
 
 .daydiv {
+  /* Slack's signature: the date rides along the top of the viewport while you
+     scroll through that day, so you never lose track of when you are. It is a
+     direct child of the scroll container (#messages, .thread-msgs), which is
+     what sticky needs. Below the action bar's z-index so a hovered row's
+     controls still win where the two meet. */
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
   display: flex;
   align-items: center;
   gap: var(--s-5);
@@ -1275,6 +1283,10 @@
 
   #typing, .receipt { padding-inline: var(--s-5); }
   #composerBar { padding: var(--s-2) var(--s-5) max(var(--s-5), env(safe-area-inset-bottom)); }
+  /* The phone composer stacks the field above the tools, so it is ~30px taller
+     than the desktop one. Measured at 390px the pill was landing on top of the
+     typing indicator; this clears the whole strip. */
+  .new-below { bottom: calc(var(--s-12) + var(--s-11) + env(safe-area-inset-bottom)); }
   .acpop {
     left: var(--s-5);
     right: var(--s-5);
@@ -1318,26 +1330,36 @@
    ========================================================================= */
 
 @media (hover: none) {
-  /* There is no hover on a phone, so the bar has to be permanently present -
-     but the full bar is six quick emoji plus every registered action, which is a
-     ~340px strip hanging over the message above it. Unusable, and it buries the
-     conversation.
+  /* There is no hover on a phone, so a hover-revealed bar simply does not exist
+     and something has to be permanently present.
 
-     So on touch it collapses to the three controls that cannot be reached any
-     other way, and it stops overlapping anything:
+     What does NOT work - both measured at 390px, where the body column is 258px:
+       - the whole bar (six quick emoji plus every registered action) is a ~340px
+         strip hanging over the message above it;
+       - three or four actions plus a fixed-width notch is ~150px of opaque panel
+         whose width depends on what the action registry happens to hold. It
+         drifts wider than the notch and then covers names, timestamps and words.
+         Worse, .body pre / .body table / .atts each establish their own
+         formatting context in order to scroll their own overflow, and a
+         formatting-context box SHRINKS to dodge a float instead of flowing
+         around it - so every code block and table rendered at a third width.
 
-       1. react        - the emoji picker, which stands in for all six quick emoji
-       2. thread/reply - the first registered action (thread in a channel; the
-                         thread action is filtered out inside the thread panel,
-                         where this slot becomes quote-reply instead)
-       3. more         - the last registered action, the ⋯ menu
+     So the bar keeps exactly two controls, and it is sized to fit in the empty
+     tail of the name/time line rather than over the message:
 
-     Everything else stays available through the long-press context menu that
-     messages.js already wires up on every row, which is the native idiom here.
+       1. react - the emoji picker. .rxns is empty until a message already HAS a
+                  reaction, so without this there is no way to add the first one.
+       2. more  - the ⋯ overflow menu.
 
-     Selected structurally rather than by title: buildMessage always emits the
-     quick emoji first, then the picker, then the registered actions in `order`,
-     with `more` at 900 and therefore last. */
+     Reply-in-thread, quote reply and every feature action stay on the long-press
+     menu messages.js wires to every row through oncontextmenu, which is the
+     native idiom on this form factor. Opening an existing thread keeps a
+     full-size tap target of its own further down (.threadind).
+
+     Both selectors are anchored rather than chained, so neither walks off the
+     end when a feature module registers another action: buildMessage always
+     emits the QUICK_EMOJI run first with the picker immediately after it, and
+     `more` is registered at order 900 and is therefore always last. */
   .actions {
     opacity: 1;
     visibility: visible;
@@ -1345,30 +1367,62 @@
     top: var(--s-1);
     right: var(--s-3);
     gap: 0;
-    box-shadow: var(--e-1);
+    padding: 0;
+    /* No panel. Two quiet glyphs sitting in the row's own whitespace read as
+       part of the message; a bordered, shadowed card repeated down every single
+       row reads as clutter and was the loudest thing on the screen. */
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
   }
-  .actions > button { display: none; }
-  .actions .quick + button:not(.quick),
-  .actions .quick + button:not(.quick) + button,
-  .actions > button:last-child {
+  /* Scoped through .msg on purpose, not for effect: a later stylesheet gives
+     every icon button `button:has(.ico){display:inline-flex}`, which ties with a
+     bare `.actions > button` and wins on order. The bar only ever exists inside
+     a row, so naming the row is both accurate and enough to settle it without
+     reaching for !important. */
+  .msg .actions > button { display: none; }
+  .msg .actions .quick + button:not(.quick),
+  .msg .actions > button:last-child {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 38px;
-    height: 38px;
+    min-width: 40px;
+    height: var(--s-9);
     padding: 0;
     font-size: var(--t-md);
   }
+  /* 40x32 is what fits beside a name and a timestamp. The tap target reaches a
+     full 44x44 through a transparent extension instead, so ergonomics cost
+     nothing in layout. Each button grows AWAY from its neighbour - the react
+     button leftwards, the overflow button rightwards into the row's own padding
+     - so the two hit areas tile instead of overlapping and stealing each
+     other's taps. */
+  .msg .actions .quick + button:not(.quick)::after,
+  .msg .actions > button:last-child::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  .msg .actions .quick + button:not(.quick)::after { left: -4px; }
+  .msg .actions > button:last-child::after { right: -4px; }
 
-  /* The bar is absolutely positioned, so it would sit on top of the first line
-     of the message. This float reserves a notch in the top-right of the body
-     column and the text flows around it - the bar never covers a word. */
+  /* Reserve the corner the bar occupies. 84x32 is the bar's own box: on a row
+     with a header the name and time are far shorter than the column, so nothing
+     moves at all; on a grouped row the first line or two shorten by 84px and the
+     rest of the message runs the full width. */
   .mbody::before {
     content: "";
     float: right;
-    width: 128px;
-    height: 44px;
+    width: 84px;
+    height: var(--s-9);
   }
+  /* The formatting-context boxes described above. Clearing puts them below the
+     notch at full width instead of letting them shrink beside it. */
+  .body pre,
+  .body table,
+  .atts,
+  .rxns { clear: right; }
 
   /* Reactions keep their compact look but gain a 44px tall hit area from a
      transparent extension, so density does not pay for ergonomics. */
@@ -1394,7 +1448,10 @@
   .quote { padding-block: var(--s-2); }
 
   .crow button { min-width: 44px; height: 44px; }
-  .crow textarea { min-height: 36px; padding-block: var(--s-4); }
+  /* 32 + 6 above + 6 below is a 44px target on one line of text. The previous
+     36 + 8 + 8 gave the composer a 108px footprint - an eighth of an iPhone
+     screen - for a single empty line. */
+  .crow textarea { min-height: var(--s-9); padding-block: var(--s-3); }
   .alsosend { min-height: 44px; }
   .alsosend input { width: 20px; height: 20px; }
   .ac-row { min-height: 44px; }

@@ -193,11 +193,16 @@ export function initAuth(onSignedIn) {
   $('otpResend').onclick = () => { if (!$('otpResend').disabled) sendCode(); };
 
   // ---- sign out ----
-  $('signout').onclick = async () => {
-    await sb.auth.signOut();
-    location.hash = '';
-    location.reload();
-  };
+  // Sign out lives in the user menu now (js/shell.js). The old top-level button
+  // is gone, so bind only if some surface still offers one.
+  const so = $('signout');
+  if (so) {
+    so.onclick = async () => {
+      await sb.auth.signOut();
+      location.hash = '';
+      location.reload();
+    };
+  }
 }
 
 function startCooldown() {

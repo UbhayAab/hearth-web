@@ -358,8 +358,14 @@ section.msgs {
   font-size: var(--t-sm);
 }
 
-/* Shown only once the layout narrows; see the phone block below. */
-.only-mobile { display: none; }
+/* Shown only once the layout narrows; see the phone block below.
+   The second selector is not redundant. A later stylesheet gives every header
+   icon button `display: inline-flex` through `#topbar button.icon`, which
+   outranks a bare class and put the drawer toggle back on the desktop header.
+   Matching that weight and adding the class is the smallest honest way to win
+   it back - the alternative is !important, which would only move the fight. */
+.only-mobile,
+#topbar button.icon.only-mobile { display: none; }
 
 /* ============================================================================
    VOICE BAR
@@ -892,7 +898,8 @@ body.nav-open #messages::after {
     --header-h: 56px;
   }
 
-  .only-mobile { display: inline-flex; }
+  .only-mobile,
+  #topbar button.icon.only-mobile { display: inline-flex; }
   #spaceName,
   .meName,
   #btnInvite { display: none; }
@@ -917,31 +924,38 @@ body.nav-open #messages::after {
 
   /* Installing matters most on a phone, so the button stays - but as its glyph.
      A labelled button here shoulders the channel name out of the header, and
-     the title attribute still carries the meaning. */
+     the title attribute still carries the meaning. font-size:0 collapses the
+     word; the icon is an inline SVG at a fixed pixel size so it survives, and
+     the gap has to go with the word or the glyph sits off-centre in its box. */
   #installBtn.install {
     flex: none;
     width: 44px;
     min-width: 44px;
     min-height: 44px;
     padding: 0;
+    gap: 0;
     justify-content: center;
     font-size: 0;
-  }
-  #installBtn.install::before {
-    content: "⬇";
-    font-size: var(--t-lg);
-    line-height: 1;
   }
   /* Sign out moves out of the way of the things people tap every minute. It is
      still reachable from the profile panel. */
   #topbar #signout { display: none; }
 
   #voicebar { padding: var(--s-3) var(--s-5); }
-  /* A busy room must not eat the phone. Participants scroll sideways in their
-     own strip instead of wrapping the whole bar onto a fourth line; the mask is
-     the hint that the list keeps going. */
+  /* A busy room must not eat the phone. Two rows, always: who is in the room,
+     then the controls. The spacer is given a full-width basis so it cannot fit
+     beside anything and therefore forces the break at exactly that point -
+     without it the buttons pack in next to the names and every extra person
+     pushes another row onto a screen that has none to give. */
+  #voicebar .sp {
+    flex: 1 0 100%;
+    height: 0;
+  }
+  /* Basis 0, not auto: with an auto basis the strip is as wide as all its pills
+     laid end to end, which sends it to a line of its own. */
   #vparts {
-    flex: 1 1 auto;
+    flex: 1 1 0;
+    min-width: 0;
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;

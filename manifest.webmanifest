@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Retry",
-  "short_name": "Retry",
+  "name": "Soop",
+  "short_name": "Soop",
   "description": "Invite-only team chat: channels and voice rooms, threads that stay out of the way, and media that never leaves the app. A Redtree product.",
   "start_url": "./?source=pwa",
   "scope": "./",
@@ -19,7 +19,7 @@
   ],
   "screenshots": [
     { "src": "./icons/shot-wide.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide", "label": "Channels, threads and voice" },
-    { "src": "./icons/shot-narrow.png", "sizes": "720x1280", "type": "image/png", "form_factor": "narrow", "label": "Retry on mobile" }
+    { "src": "./icons/shot-narrow.png", "sizes": "720x1280", "type": "image/png", "form_factor": "narrow", "label": "Soop on mobile" }
   ],
   "shortcuts": [
     { "name": "Threads", "url": "./#/threads", "description": "Every thread you are part of" },

@@ -18,6 +18,7 @@ import { jumpTo, buildMessage } from './core/messages.js';
 import { initPWA, paintInstallButton } from './pwa.js';
 import { initTheme, openThemePicker, cycleTheme } from './theme.js';
 import { icon, logoMark } from './icons.js';
+import { initShell, paintIdentity, paintChannelBar } from './shell.js';
 import { registerFeatures } from './features/index.js';
 
 // Any element carrying data-ico gets its SVG injected. Keeping the markup
@@ -111,7 +112,7 @@ async function enter() {
     .select('*').eq('id', store.me).maybeSingle();
   store.myProfile = prof || { id: store.me, display_name: 'you' };
   store.profiles.set(store.me, store.myProfile);
-  $('meName').textContent = store.myProfile.display_name || 'you';
+  paintIdentity();
 
   subscribeUser(s.user.id);
   initPresence();
@@ -154,11 +155,11 @@ function flashTitle() {
   clearInterval(titleTimer);
   let on = false;
   titleTimer = setInterval(() => {
-    document.title = (on = !on) ? '● Retry' : 'Retry';
+    document.title = (on = !on) ? '● Soop' : 'Soop';
   }, 900);
   document.addEventListener('visibilitychange', function once() {
     clearInterval(titleTimer);
-    document.title = 'Retry';
+    document.title = 'Soop';
     document.removeEventListener('visibilitychange', once);
   });
 }
@@ -271,7 +272,6 @@ async function main() {
   $('panelClose').onclick = closePanel;
   $('btnInvite').onclick = () => inviteDialog();
   $('btnSpaces').onclick = spaceChooser;
-  $('btnTheme').onclick = (e) => openThemePicker(e.currentTarget);
   $('btnMembersCount').onclick = () => openPanel('members');
   $('installBtn').onclick = () => import('./pwa.js').then((m) => m.promptInstall());
 
@@ -293,5 +293,5 @@ window.addEventListener('hashchange', () => {
 
 main().catch((e) => {
   console.error(e);
-  document.body.innerHTML = `<pre style="padding:20px;color:#f88">Retry failed to start:\n${esc(e.stack || e.message)}</pre>`;
+  document.body.innerHTML = `<pre style="padding:20px;color:#f88">Soop failed to start:\n${esc(e.stack || e.message)}</pre>`;
 });

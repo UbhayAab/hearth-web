@@ -1,4 +1,4 @@
-// Retry service worker.
+// Soop service worker.
 //
 // Rules that matter:
 //  - Never cache Supabase (auth, realtime, RPC, storage). A stale message list or
@@ -7,7 +7,7 @@
 //    posts SKIP_WAITING.
 //  - The esm.sh dependencies are cached so the app opens offline instead of
 //    hanging on a module import.
-const VERSION = 'retry-v4';
+const VERSION = 'soop-v5';
 const SHELL = VERSION + '-shell';
 const VENDOR = VERSION + '-vendor';
 
@@ -22,6 +22,8 @@ const SHELL_FILES = [
   './css/panels.css',
   './css/features.css',
   './css/reading.css',
+  './css/shell.css',
+  './js/shell.js',
   './js/theme.js',
   './js/icons.js',
   './manifest.webmanifest',
@@ -128,12 +130,12 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data?.json() || {}; } catch { d = { body: e.data?.text() || '' }; }
-  const title = d.title || 'Retry';
+  const title = d.title || 'Soop';
   e.waitUntil(self.registration.showNotification(title, {
     body: d.body || '',
     icon: './icons/icon-192.png',
     badge: './icons/icon-192.png',
-    tag: d.tag || 'retry',
+    tag: d.tag || 'soop',
     data: d,
     renotify: true,
   }));

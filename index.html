@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
-<title>Retry</title>
-<meta name="description" content="Retry - invite-only team chat: channels, threads that stay out of the way, voice rooms and high-fidelity media. A Redtree product." />
+<title>Soop</title>
+<meta name="description" content="Soop - invite-only team chat: channels, threads that stay out of the way, voice rooms and high-fidelity media. A Redtree product." />
 <meta name="theme-color" content="#0f1115" />
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icons/icon-192.png" />
 <link rel="apple-touch-icon" href="./icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Retry" />
+<meta name="apple-mobile-web-app-title" content="Soop" />
 <meta name="mobile-web-app-capable" content="yes" />
 
 <!-- Paint the stored theme before the first frame. Doing this from a module
@@ -42,6 +42,7 @@
 <link rel="stylesheet" href="./css/panels.css" />
 <link rel="stylesheet" href="./css/features.css" />
 <link rel="stylesheet" href="./css/reading.css" />
+<link rel="stylesheet" href="./css/shell.css" />
 </head>
 <body>
 <div id="app">
@@ -49,7 +50,7 @@
   <!-- ================= AUTH ================= -->
   <div id="auth" class="authwrap hidden">
     <div class="authcard">
-      <div class="brand"><span class="brand-mark" id="brandMark"></span><h1>Retry</h1></div>
+      <div class="brand"><span class="brand-mark" id="brandMark"></span><h1>Soop</h1></div>
       <p class="tagline">Channels and voice rooms like Discord. Threads that never shout over the room, like Slack. Media that stays right here, like WhatsApp.</p>
 
       <label class="field"><span class="field-label">Your name</span>
@@ -97,22 +98,54 @@
 
   <!-- ================= CHAT ================= -->
   <div id="chat" class="hidden">
+    <!-- GLOBAL BAR: three zones only - where you are, what you are looking for,
+         and who you are. Everything contextual moved to the channel bar below.
+         Thirteen undifferentiated icons in one row is not a toolbar, it is a
+         wall, and nobody can tell what any of them do. -->
     <header id="topbar">
-      <button class="icon only-mobile" id="navToggle" title="Channels" data-ico="menu"></button>
-      <strong id="spaceName"></strong>
-      <div class="hdr-title">
+      <div class="tb-left">
+        <button class="icon only-mobile" id="navToggle" title="Channels"
+          aria-label="Show channels" data-ico="menu"></button>
+        <strong id="spaceName"></strong>
+      </div>
+
+      <div class="tb-center">
+        <button id="globalSearch" class="searchbar" aria-label="Search">
+          <span data-ico="search"></span>
+          <span class="searchbar-text">Search this Space</span>
+          <kbd class="searchbar-kbd">Ctrl K</kbd>
+        </button>
+      </div>
+
+      <div class="tb-right">
+        <button id="installBtn" class="install hidden" title="Install Soop as an app">
+          <span data-ico="download"></span> Install</button>
+        <button class="icon" id="btnHelp" title="Keyboard shortcuts"
+          aria-label="Keyboard shortcuts" data-ico="keyboard"></button>
+        <button class="userchip" id="userMenu" aria-label="You, and your settings">
+          <span id="meAvatar" class="userchip-av"></span>
+          <span class="meName" id="meName"></span>
+          <span data-ico="chevronDown" class="userchip-caret"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- CHANNEL BAR: everything that is about the channel you are actually in.
+         Contextual actions live here, next to the thing they act on, with the
+         long tail behind one overflow menu instead of spread across the top. -->
+    <div id="channelbar">
+      <div class="cb-title">
         <strong id="hdrName">#</strong>
-        <span class="muted" id="hdrTopic"></span>
+        <span class="cb-topic muted" id="hdrTopic"></span>
       </div>
       <span class="sp"></span>
-      <button id="installBtn" class="install hidden" title="Install Retry as an app"><span data-ico="download"></span> Install</button>
-      <button id="btnInvite" class="sm" title="Invite people to this Space">Invite</button>
+      <button class="cb-members" id="btnMembersCount" aria-label="Members">
+        <span class="dot on"></span><span id="onlineCount">1</span>
+      </button>
       <div id="headerActions" class="hdr-actions"></div>
-      <button class="icon" id="btnTheme" title="Appearance" aria-label="Change appearance" data-ico="contrast"></button>
-      <button class="icon" id="btnMembersCount" title="Online"><span class="dot on"></span><span id="onlineCount">1</span></button>
-      <span class="muted meName" id="meName"></span>
-      <button class="ghost sm" id="signout">Sign out</button>
-    </header>
+      <button class="icon" id="btnMore" title="More" aria-label="More actions" data-ico="more"></button>
+      <button id="btnInvite" class="sm" title="Invite people to this Space">Invite</button>
+    </div>
 
     <div id="voicebar" class="hidden">
       <strong class="vlabel"><span data-ico="volume"></span> <span id="vchanName"></span></strong>
@@ -128,9 +161,21 @@
       <div id="spaceRail"></div>
 
       <nav id="sidebar">
-        <button class="ghost sm wide" id="btnSpaces"><span data-ico="plus"></span> Create or join a Space</button>
-        <div id="channels"></div>
-        <div id="navExtra"></div>
+        <div id="sidebarScroll">
+          <div id="channels"></div>
+          <div id="navExtra"></div>
+          <button class="sb-add" id="btnSpaces"><span data-ico="plus"></span> Create or join a Space</button>
+        </div>
+        <!-- Your own presence belongs where you can always see and change it,
+             not buried in a header row. -->
+        <button id="sidebarMe" class="sb-me">
+          <span id="sbMeAvatar" class="sb-me-av"></span>
+          <span class="sb-me-text">
+            <span class="sb-me-name" id="sbMeName"></span>
+            <span class="sb-me-status" id="sbMeStatus">Active</span>
+          </span>
+          <span data-ico="chevronDown" class="sb-me-caret"></span>
+        </button>
       </nav>
 
       <section class="msgs">

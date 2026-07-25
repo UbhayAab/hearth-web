@@ -871,6 +871,16 @@
   margin-top: var(--s-4);
 }
 :root .later-bar button { font-size: var(--t-sm); }
+/* The three state buttons are a choice, so the chosen one gets the same
+   treatment as every other segmented control here: an opaque background and an
+   accent ring rather than accent-coloured text, which fails AA at 12.5px on
+   the panel surface. */
+:root .later-bar button.on {
+  background: var(--c-bg);
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px var(--c-accent);
+  color: var(--c-text);
+}
 
 /* A due time is a chip: the tint carries the urgency, --c-text carries the
    reading. Amber and red text at 12.5px fail AA on the panel surface. */
@@ -1600,7 +1610,11 @@
 @media (hover: none) {
   :root .cv-tools { opacity: 1; }
   :root .cv-check { width: 20px; height: 20px; margin-top: 9px; }
-  :root .cv-tools button { min-width: 40px; min-height: 40px; }
+  /* Three always-on tools at a literal 44px would eat a third of a phone
+     column, so the control stays 32px and the hit area is extended past it -
+     the same trick messages.css uses on reaction chips. */
+  :root .cv-tools button { position: relative; min-width: 32px; min-height: 32px; }
+  :root .cv-tools button::after { content: ""; position: absolute; inset: -6px; }
 
   :root .bmk-pill,
   :root .forum-chip,

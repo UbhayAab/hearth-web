@@ -43,7 +43,7 @@
 .roles-pick,
 .onb-rules,
 .mod-note {
-  --panel: var(--c-surface);
+  --panel: var(--panel-bg, var(--c-surface));
   --panel2: var(--c-surface-2);
   --panel3: var(--c-surface-3);
   --line: var(--c-border);
@@ -67,8 +67,17 @@
    is what gets painted inside it.
 
    min-width:0 is the one structural thing this file needs: without it a wide
-   admin table would refuse to shrink and push the sheet sideways on a phone. */
-#panelContent { min-width: 0; }
+   admin table would refuse to shrink and push the sheet sideways on a phone.
+
+   --panel-bg is the one fact about the shell this file has to know: what colour
+   is directly behind the panel body. Anything that pins itself over scrolling
+   content has to repaint it. layout.css gives aside#panel --c-surface on a
+   desktop and --c-bg once it becomes a full-screen sheet, so the value is
+   restated at that same breakpoint below and read from exactly one place. */
+#panelContent {
+  min-width: 0;
+  --panel-bg: var(--c-surface);
+}
 
 /* Search fields that a panel drops in as its own first child. */
 #panelContent > input,
@@ -310,11 +319,15 @@ body .admin-linkrow {
   align-items: center;
   gap: var(--s-4);
 }
+/* No background of its own: components.css deliberately makes every field
+   --c-bg so it reads as a well cut into whatever card it sits on. Painting this
+   one --c-surface-2 made it the only flat field in the invite dialog, and in
+   the dark theme --c-surface-2 and --c-overlay are the same colour, so inside
+   the modal the well vanished entirely. */
 .invite-row input,
 body .admin-linkrow input {
   flex: 1;
   min-width: 0;
-  background: var(--c-surface-2);
   color: var(--c-text);
   font-family: var(--t-mono);
   font-size: var(--t-sm);
@@ -362,6 +375,30 @@ body .admin-linkrow button { flex: none; }
   min-width: 0;
   color: var(--c-text-2);
 }
+/* workspace.js labels the Revoke control class="icon", and components.css sizes
+   .icon as a 32px square with no padding - so a six-letter word rendered as
+   naked text spilling out of an invisible box, with a 32px tap target under it.
+   Only this one instance is corrected, and it is given the same quiet outline
+   the admin console's Revoke already has, so the two lists of invites agree. */
+.inv-row button.icon {
+  width: auto;
+  height: auto;
+  min-height: 28px;
+  flex: none;
+  padding: var(--s-3) var(--s-5);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  font-weight: var(--t-semibold);
+}
+.inv-row button.icon:hover {
+  border-color: var(--c-border-strong);
+  background: var(--c-surface-3);
+  color: var(--c-text);
+}
+.inv-row button.icon:active { background: var(--c-surface-3); }
 
 /* ============================================================================
    7. SPACE CHOOSER - create vs join
@@ -419,6 +456,12 @@ body .admin-linkrow button { flex: none; }
 }
 .chooser-card .muted {
   margin-top: var(--s-3);
+  /* opacity, not just colour: components.css softens `button .muted` to 0.78 so
+     secondary text on a filled accent button keeps that button's own ink. This
+     card is a button but it is not filled - its muted line sits on a surface and
+     already carries the content-area grey, and the extra 0.78 dropped it from
+     5.4:1 to 3.4:1 in the light and colorful themes. */
+  opacity: 1;
   color: var(--c-text-2);
   font-size: var(--t-sm);
   font-weight: var(--t-normal);
@@ -446,18 +489,27 @@ body .admin-root {
    Underlined tabs rather than a filled segmented track: an underline reads the
    same in all three themes without depending on what colour layout.css gives
    the panel behind it. Scrolls sideways on a phone rather than wrapping to
-   two ragged lines. */
+   two ragged lines.
+
+   It stays pinned: the Audit log and the Invites list are unbounded, and losing
+   the way back to Overview after two screens of scrolling is the difference
+   between a console and a dump. It is the first child of #panelContent, so
+   top:0 parks it flush against the top of the scrollport with nothing above it
+   to show through. The shadow is a wash of the panel's own colour reaching up
+   and sideways past the padding, never below the border - insurance against a
+   fractional scroll offset leaving a one-pixel seam of moving text. */
 body .admin-tabs {
   display: flex;
   flex-wrap: nowrap;
   gap: var(--s-6);
-  /* the injected rule pins this; static keeps it from floating over content
-     on a background that may not match the panel */
-  position: static;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
   margin: 0 0 var(--s-3);
   padding: 0;
   border-bottom: 1px solid var(--c-border);
-  background: transparent;
+  background: var(--panel-bg, var(--c-surface));
+  box-shadow: 0 calc(-1 * var(--s-6)) 0 var(--s-6) var(--panel-bg, var(--c-surface));
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -640,6 +692,10 @@ body .mod-line button.danger:hover {
   background: var(--c-danger);
   color: var(--c-text-inverse);
 }
+/* Off, but still legible. components.css already drops every disabled button to
+   0.45 opacity; layering --c-text-3 under that took the label to 1.4:1, which
+   is not "unavailable", it is "gone". --c-text-2 plus that opacity reads as a
+   greyed-out word, which is the whole point. */
 body .admin-acts button.danger:disabled,
 body .roles-acts button.danger:disabled,
 body .mod-actions button.danger:disabled,
@@ -647,7 +703,7 @@ body .admin-line button.danger:disabled,
 body .mod-line button.danger:disabled {
   border-color: var(--c-border);
   background: var(--c-bg);
-  color: var(--c-text-3);
+  color: var(--c-text-2);
 }
 
 /* ------------------------------------------------------------------ list lines
@@ -841,6 +897,28 @@ body .roles-perm-off:hover {
   background: var(--c-surface-2);
 }
 body .roles-perm-off input { cursor: not-allowed; }
+
+/* ------------------------------------------------------------------ role colour
+   roles.js builds the role editor as a bare .form with no class of its own, and
+   its colour picker inherits the width:100% every field gets - so the swatch
+   renders as a 600px gradient banner that dominates the dialog and says nothing
+   a 44px chip would not. Scoped through :has(.roles-grid) so it can only ever
+   match the role editor; the generic input[type=color] is components.css's. */
+.form:has(.roles-grid) > .field > input[type="color"] {
+  width: 56px;
+  height: 36px;
+  min-height: 36px;
+  padding: var(--s-1);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+@media (hover: none) {
+  .form:has(.roles-grid) > .field > input[type="color"] {
+    width: 64px;
+    height: 44px;
+    min-height: 44px;
+  }
+}
 
 body .roles-pick {
   display: grid;
@@ -1044,10 +1122,22 @@ body .onb-rr b {
    that can push the page sideways.
    ========================================================================= */
 @media (max-width: 860px) {
+  /* The panel is a full-screen sheet on --c-bg here, not a --c-surface column.
+     Anything that repaints the background behind itself - the pinned tab bar -
+     reads this, so it is stated once. */
+  #panelContent { --panel-bg: var(--c-bg); }
+
   /* One column: two 44px checkbox rows side by side at 360px is unreadable. */
   body .roles-grid { grid-template-columns: 1fr; }
 
   body .roles-name { max-width: 60%; }
+
+  /* auto-fit lands on two columns at 390px and leaves a third card stranded at
+     half width beside a hole, with its caption wrapping while its neighbours'
+     do not. Pin two columns and let an odd last card take the full row: three
+     stats read as 2 + 1, not as 2 + rubble. */
+  body .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body .admin-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
   /* Give the table region most of the screen once the panel is the screen. */
   body .admin-scroll { max-height: min(64dvh, 620px); }
@@ -1072,12 +1162,66 @@ body .onb-rr b {
 /* ============================================================================
    13. TOUCH
    Nothing in these panels is revealed by hover - every action button is in the
-   DOM from the start - so the only work here is size and press feedback.
+   DOM from the start - so no affordance is lost here. The work is size, press
+   feedback, and taking the hover fills back off.
+
+   That last part matters more than it sounds. A touch browser fires :hover on
+   tap and leaves it applied until you touch something else, so every hover
+   style in this file is really a "last thing I touched" style on a phone: a row
+   that stays lit after you have moved on, and - worse - a Delete button still
+   sitting there filled solid red long after the dialog it opened has closed.
+   Every hover this file owns is neutralised back to its resting value.
    ========================================================================= */
 @media (hover: none) {
   .member { min-height: 44px; }
 
   .result { padding: var(--s-5); }
+
+  /* ---- hover fills off ---- */
+  .result:hover,
+  .member:hover,
+  body .roles-row:hover,
+  body .admin-table tbody tr:hover td { background: transparent; }
+
+  .chooser-card:hover {
+    border-color: var(--c-border);
+    background: var(--c-surface-2);
+    transform: none;
+  }
+
+  body .roles-perm:hover {
+    border-color: var(--c-border);
+    background: var(--c-surface-2);
+  }
+  /* A ticked permission keeps its accent fill - that is state, not hover. */
+  body .roles-perm:has(input:checked):hover {
+    border-color: var(--c-accent);
+    background: var(--c-accent-quiet);
+  }
+
+  body .admin-tabs button:hover {
+    color: var(--c-text-2);
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+  body .admin-tabs button:not(.ghost):hover {
+    color: var(--c-text);
+    box-shadow: inset 0 -2px 0 var(--c-accent);
+  }
+
+  body .admin-acts button.danger:hover,
+  body .roles-acts button.danger:hover,
+  body .mod-actions button.danger:hover,
+  body .admin-line button.danger:hover,
+  body .mod-line button.danger:hover {
+    border-color: color-mix(in srgb, var(--c-danger) 45%, transparent);
+    background: var(--c-bg);
+    color: var(--c-danger);
+  }
+
+  .inv-row button.icon:hover {
+    border-color: var(--c-border);
+    background: var(--c-surface-2);
+  }
 
   /* 44x44 minimum for every control in a dense admin row. */
   body .admin-acts button,

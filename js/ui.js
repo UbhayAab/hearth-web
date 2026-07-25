@@ -186,14 +186,29 @@ export function addHeaderButton(def) {
   headerButtons.push({ order: 50, ...def });
   renderHeaderButtons();
 }
+// Visible, in registration order, after the show() filter. The shell decides how
+// many of these fit on the channel bar and puts the rest behind one overflow
+// menu - a feature never has to know which side of that line it landed on.
+export function getHeaderButtons() {
+  return [...headerButtons].sort((a, z) => a.order - z.order)
+    .filter((b) => !b.show || b.show());
+}
+
+// Only the first `inlineCap` render as buttons. Thirteen identical glyphs in a
+// row is a wall, not a toolbar.
+export let inlineCap = 4;
+export function setInlineCap(n) { inlineCap = n; renderHeaderButtons(); }
+
 export function renderHeaderButtons() {
   const host = $('headerActions');
   if (!host) return;
   host.innerHTML = '';
-  for (const b of [...headerButtons].sort((a, z) => a.order - z.order)) {
-    if (b.show && !b.show()) continue;
+  for (const b of getHeaderButtons().slice(0, inlineCap)) {
     const n = el('button', 'icon' + (b.cls ? ' ' + b.cls : ''), b.label);
     n.title = b.title || '';
+    // Icon-only buttons contain an SVG with no text, so without this a screen
+    // reader announces nothing at all.
+    n.setAttribute('aria-label', b.title || b.id);
     n.id = 'hb-' + b.id;
     n.onclick = (e) => b.onClick(e);
     host.appendChild(n);
@@ -321,7 +336,7 @@ export function spinner(text = 'loading…') { return el('div', 'muted pad', esc
 export function emptyState(text) { return el('div', 'empty', esc(text)); }
 
 export const ui = {
-  toast, modal, confirmModal, formModal,
+  toast, modal, confirmModal, formModal, getHeaderButtons, setInlineCap,
   registerPanel, openPanel, closePanel, refreshPanel, currentPanel,
   addHeaderButton, renderHeaderButtons, addNavSection, renderNavSections,
   addMessageAction, getMessageActions, addComposerButton, renderComposerButtons,

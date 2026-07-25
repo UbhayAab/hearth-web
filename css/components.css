@@ -59,14 +59,6 @@ button:hover { background: var(--c-accent-hover); }
 /* Pressed means pressed: it sinks by a hair and loses its shadow. */
 button:active { transform: translateY(1px); box-shadow: none; }
 
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-button:disabled:hover { background: var(--c-accent); }
-
 /* A filled button carries its own ink. Secondary text inside one has to be a
    softened version of THAT ink - the content-area grey of .muted/.faint sits on
    --c-bg and disappears entirely on an accent fill. Softening with opacity
@@ -90,7 +82,6 @@ button.ghost:hover {
   border-color: var(--c-border-strong);
 }
 button.ghost:active { background: var(--c-surface-3); }
-button.ghost:disabled:hover { background: var(--c-surface-2); }
 
 /* ------------------------------------------------------------------ danger */
 button.danger {
@@ -98,7 +89,6 @@ button.danger {
   color: var(--c-text-inverse);
 }
 button.danger:hover { background: color-mix(in srgb, var(--c-danger) 86%, var(--c-text)); }
-button.danger:disabled:hover { background: var(--c-danger); }
 
 /* ------------------------------------------------------------------ toggled
    .on is the "this setting is live" state - mute, deafen, a filter chip.
@@ -155,7 +145,6 @@ button.icon.on {
   background: var(--c-accent-quiet);
   color: var(--c-accent);
 }
-button.icon:disabled:hover { background: transparent; color: var(--c-text-2); }
 
 /* The send arrow carries the accent so the composer always shows its verb. */
 button.icon.send {
@@ -166,7 +155,6 @@ button.icon.send:hover {
   background: var(--c-accent-quiet);
   color: var(--c-accent-hover);
 }
-button.icon.send:disabled { color: var(--c-text-2); background: transparent; }
 
 /* ------------------------------------------------------------------ install
    A tinted call to action rather than a solid one, because "install the app" is
@@ -181,9 +169,44 @@ button.install {
   color: var(--c-text);
   box-shadow: none;
 }
-button.install:hover {
-  background: color-mix(in srgb, var(--c-accent) 14%, transparent);
-  border-color: var(--c-accent);
+/* ------------------------------------------------------------------ disabled
+   Last, so that at equal specificity it beats every variant above without
+   reaching for !important.
+
+   Disabled is a repaint, not a fade. Opacity composites a button's ink AND its
+   fill towards the same page colour, so on a light theme a 45%-faded accent
+   chip washes out to pale blue while its white label stays white: measured,
+   about 2:1, effectively unreadable. Draining the colour instead says "inert"
+   far more clearly than transparency ever did, and it is the skin panels.css
+   and features.css already chose for their own disabled buttons. */
+   Because the fill carries the state, the LABEL does not have to be dimmed into
+   illegibility to say so: --c-surface under --c-text-2 measures 5.6 / 7.4 / 5.7
+   in light / dark / colorful, so a disabled button still passes AA. The flatter
+   surface and the softer-than-.ghost hairline are what read as "off". */
+button:disabled,
+button:disabled:hover,
+button:disabled:active {
+  background: var(--c-surface);
+  border-color: var(--c-border-subtle);
+  color: var(--c-text-2);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* An icon button is a bare glyph on no surface, so there is no fill to drain -
+   colour is the only channel left, and it has to go quiet enough that an empty
+   composer visibly cannot be sent. --c-text-3 lands at 3.1-4.1 against the page,
+   under AA body text but above the 3.0 floor for non-text, and WCAG 1.4.3
+   exempts inactive components for exactly this reason. Single-channel, no
+   opacity on top, so what the audit measures is what the eye gets. */
+button.icon:disabled,
+button.icon:disabled:hover,
+button.icon:disabled:active {
+  background: transparent;
+  border-color: transparent;
+  color: var(--c-text-3);
+  opacity: 1;
 }
 
 /* Touch: a 32px square is a miss on a phone. Grow the button and hang an
@@ -683,8 +706,8 @@ input[type="radio"] {
   /* The scrollbar is hidden, so the fade is the only thing telling you there
      are more categories to the right. A mask reads alpha only, which is why
      currentColor works here and no colour is being invented. */
-  mask-image: linear-gradient(90deg, currentColor calc(100% - var(--s-7)), transparent);
-  -webkit-mask-image: linear-gradient(90deg, currentColor calc(100% - var(--s-7)), transparent);
+  mask-image: linear-gradient(90deg, currentColor calc(100% - var(--s-9)), transparent);
+  -webkit-mask-image: linear-gradient(90deg, currentColor calc(100% - var(--s-9)), transparent);
 }
 .emoji-tabs::-webkit-scrollbar { display: none; }
 
