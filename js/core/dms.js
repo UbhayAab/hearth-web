@@ -78,7 +78,13 @@ export async function openDM(conversationId) {
 function onIncomingDM(conversationId, m) {
   if (store.currentDM !== conversationId) return;
   const seq = +(m.seq || 0);
-  if (seq && store.dmCursor && seq > store.dmCursor + 1) {
+  // No `store.dmCursor &&` here on purpose. openDM() sets the cursor BEFORE it
+  // subscribes, so 0 always means "this conversation is empty" and never "we do
+  // not know yet" - and a brand new conversation whose first messages are
+  // dropped is the case a truthiness check silently skips. The channel side
+  // needs an explicit flag for this because it subscribes before it knows; here
+  // the ordering already guarantees it.
+  if (seq && seq > store.dmCursor + 1) {
     dmGapBuffer.set(seq, m);
     reconcileDM();
     return;

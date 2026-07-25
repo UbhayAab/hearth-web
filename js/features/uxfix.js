@@ -1259,9 +1259,10 @@ function registerSearchPanel(ui, api) {
     async render(body, ctx) {
       body.innerHTML = '';
       const input = el('input');
-      input.type = 'search';
-      input.placeholder = 'Search messages';
-      input.value = ctx.q || '';
+      input.id = 'searchInput';       // the id the rest of the app and the
+      input.type = 'search';          // smoke suite have always looked for;
+      input.placeholder = 'Search messages';   // this panel replaces the core
+      input.value = ctx.q || '';      // one, so it has to keep the handle.
       input.setAttribute('aria-label', 'Search messages');
       const boxEl = el('div', 'search-box');
       boxEl.appendChild(input);

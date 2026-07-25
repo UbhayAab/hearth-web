@@ -7,7 +7,7 @@ import { store, bus } from '../store.js';
 import { PERM } from '../config.js';
 import { $, el, esc, initials, hueOf } from '../util.js';
 import { toast, formModal, modal, confirmModal, renderHeaderButtons } from '../ui.js';
-import { renderChannels, openChannel, refreshUnread } from './channels.js';
+import { renderChannels, openChannel, refreshUnread, lastChannelId } from './channels.js';
 
 // ------------------------------------------------------------------ rail
 export function renderSpaceRail() {
@@ -101,7 +101,14 @@ export async function switchWorkspace(target) {
   await renderChannels();
   subscribeWorkspace(target);
 
-  const first = store.channels.find((c) => c.name === 'general' && c.kind !== 'voice')
+  // Open where they left off. Two reasons, and the second is the important one:
+  // going back to the conversation you were in is what every other chat app
+  // does, and the cold-start paint has ALREADY drawn that channel from this
+  // phone's storage - opening a different one instead would swap the screen out
+  // from under the person a few seconds after showing it to them.
+  const lastId = lastChannelId();
+  const first = store.channels.find((c) => c.id === lastId && c.kind !== 'voice' && !c.archived_at)
+    || store.channels.find((c) => c.name === 'general' && c.kind !== 'voice')
     || store.channels.find((c) => c.kind !== 'voice' && !c.archived_at);
   if (first) await openChannel(first);
   else $('messages').innerHTML = '<div class="empty">No channels here yet.</div>';
@@ -143,8 +150,21 @@ function subscribeWorkspace(ws) {
     channel_created: () => bus.emit('channels:reload'),
     channel_updated: () => bus.emit('channels:reload'),
     channel_deleted: () => bus.emit('channels:reload'),
-    member_joined: () => reloadMembers(),
-    member_left: () => reloadMembers(),
+    // The payload carries the profile, so one person joining a 300-member Space
+    // costs every other client zero queries instead of one each.
+    member_joined: (p) => {
+      if (!p?.user_id) { reloadMembers(); return; }
+      store.profiles.set(p.user_id, {
+        id: p.user_id, display_name: p.display_name, username: p.username,
+        avatar_key: p.avatar_key, status_text: p.status_text,
+        status_emoji: p.status_emoji, member_type: p.member_type,
+      });
+      bus.emit('profiles');
+    },
+    member_left: (p) => {
+      if (p?.user_id) store.profiles.delete(p.user_id);
+      bus.emit('profiles');
+    },
   });
 }
 

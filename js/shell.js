@@ -66,6 +66,14 @@ function userMenu(ev) {
     '-',
     { label: 'Invite people to this Space', onClick: () => bus.emit('invite:open') },
     { label: 'Sign out', danger: true, onClick: async () => {
+      // The local-first caches keep this person's conversations on the device so
+      // the app can paint before the network. On a shared phone - which is most
+      // of them here - signing out has to take them with it. Imported here, not
+      // at the top, so neither file joins the first-paint module graph.
+      await Promise.all([
+        import('./lib/pagecache.js').then((m) => m.wipe()),
+        import('./lib/readcache.js').then((m) => m.wipe()),
+      ]).catch(() => { /* signing out must not be blocked by storage */ });
       await sb.auth.signOut();
       location.hash = '';
       location.reload();

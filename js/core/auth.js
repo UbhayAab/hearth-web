@@ -198,6 +198,11 @@ export function initAuth(onSignedIn) {
   const so = $('signout');
   if (so) {
     so.onclick = async () => {
+      // Same as the user menu: the cached conversations come off the device.
+      await Promise.all([
+        import('../lib/pagecache.js').then((m) => m.wipe()),
+        import('../lib/readcache.js').then((m) => m.wipe()),
+      ]).catch(() => { /* signing out must not be blocked by storage */ });
       await sb.auth.signOut();
       location.hash = '';
       location.reload();

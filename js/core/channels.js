@@ -28,6 +28,24 @@ let loadingOlder = false;
 // resync can ever deliver a message into it again. Measured: 25s, nothing.
 let openGen = 0;
 
+// Is store.cursor a real position in the log yet, or just its zero value?
+//
+// This distinction is load-bearing and its absence was a hole in the gap check.
+// The test used to be `if (store.cursor && seq > store.cursor + 1)`, and a
+// channel nobody has posted in yet has a cursor of 0, which is falsy - so for
+// exactly as long as a channel is empty, gap detection was switched off. Drop
+// the broadcasts for seq 1 and 2, let seq 3 arrive, and the cursor jumped
+// straight to 3; resume() was then asked for events after 3 and those two
+// messages were gone for good. Measured on a fresh channel: 2 of 3 lost, never
+// healed. That is the original bug, alive in the one window nobody looked at -
+// and a brand new channel is precisely where the first burst of messages lands.
+//
+// The guard could not simply be removed, because subscribeChannel() runs BEFORE
+// the cursor is known (a broadcast may arrive while the first page is still in
+// flight) and every one of those would have looked like a gap back to zero. So
+// the flag says which of the two situations a zero cursor is.
+let cursorReady = false;
+
 // Telegram waits up to half a second before treating a hole as a gap, because
 // the transport is allowed to reorder. Ours can too.
 const GAP_GRACE_MS = 300;
@@ -254,13 +272,66 @@ function paintPage(list, ordered, { head = HEAD_ROWS } = {}) {
   return ordered.length;
 }
 
+// ---- cold start: the last conversation, before the network
+// A returning user on Slow 3G waits 15 seconds for a message that has been in
+// this browser's own storage the whole time, because the channel cannot open
+// until sign-in, redeem_invite, profiles, get_bootstrap and get_channel_messages
+// have all been and gone. None of those are needed to draw what they were
+// reading an hour ago.
+//
+// So the moment there is a user id - before a single round trip - the last
+// channel is painted from disk into the (still hidden) chat shell. When
+// openChannel() reaches it a few seconds later it finds the rows already there,
+// keeps them, and only folds in what changed.
+const LAST_CH_KEY = 'soop.lastChannel';
+let prepainted = null;          // { id, uid } already on screen from the cache
+
+function rememberLastChannel(c) {
+  try {
+    localStorage.setItem(LAST_CH_KEY, JSON.stringify({ id: c.id, name: c.name, uid: store.me }));
+  } catch { /* private mode: the cache is a nicety, not a requirement */ }
+}
+
+export function lastChannelId() {
+  try {
+    const last = JSON.parse(localStorage.getItem(LAST_CH_KEY) || 'null');
+    return last?.uid === store.me ? last.id || null : null;
+  } catch { return null; }
+}
+
+export async function paintLastChannelFromCache() {
+  if (store.current || store.currentDM) return false;
+  let last = null;
+  try { last = JSON.parse(localStorage.getItem(LAST_CH_KEY) || 'null'); } catch { return false; }
+  if (!last?.id || !store.me || last.uid !== store.me) return false;
+  const snap = await pagecache.recall(store.me, last.id);
+  if (!snap || store.current || store.currentDM) return false;
+  const list = $('messages');
+  if (!list || list.querySelector('.msg')) return false;
+  const hdr = $('hdrName');
+  if (hdr && last.name) hdr.textContent = '# ' + last.name;
+  prepainted = { id: last.id, uid: store.me };
+  paintCached(list, snap);
+  return true;
+}
+
 export async function openChannel(c, opts = {}) {
   if (!c) return;
   const gen = ++openGen;
+  // Already on screen from the cold-start paint: keep the rows, the claim set
+  // and the cursor exactly as they are. Wiping and redrawing identical content
+  // is a flash for no information.
+  const preOpened = !!prepainted && prepainted.id === c.id && prepainted.uid === store.me
+    && !!$('messages')?.querySelector('.msg');
+  prepainted = null;
   store.current = c;
   store.currentDM = null;
-  resetChannelState();
-  resetWindow();
+  if (!preOpened) {
+    resetChannelState();
+    resetWindow();
+    cursorReady = false;          // nothing is known about our position yet
+  }
+  rememberLastChannel(c);
   gapBuffer.clear();
   delivery.buffered = 0;
   if (!opts.keepPanel) closePanel();
@@ -303,7 +374,9 @@ export async function openChannel(c, opts = {}) {
   // paint in the same frame as the tap, and even an await that resolves
   // immediately costs a frame.
   let cached = pagecache.peek(store.me, c.id);
-  if (cached) {
+  if (preOpened) {
+    // The cold-start paint already drew this one. Nothing to do but reconcile.
+  } else if (cached) {
     paintCached(list, cached);
   } else {
     list.innerHTML = '<div class="muted pad">loading…</div>';
@@ -329,7 +402,10 @@ export async function openChannel(c, opts = {}) {
   const ordered = res.rows.slice().reverse();
   const visible = ordered.filter(shouldShowInChannel);
 
-  if (!cached) {
+  const onScreen = cached || (preOpened
+    ? { msgs: [...store.msgCache.values()].sort((a, z) => (a.seq || 0) - (z.seq || 0)) }
+    : null);
+  if (!onScreen) {
     if (!visible.length) {
       list.innerHTML = '';
       list.appendChild(el('div', 'empty',
@@ -339,7 +415,7 @@ export async function openChannel(c, opts = {}) {
       paintPage(list, visible);
     }
   } else {
-    mergeIntoCached(list, visible, cached);
+    mergeIntoCached(list, visible, onScreen);
   }
 
   // The cursor tracks the channel_events log, not message seq: an edit or delete
@@ -347,6 +423,7 @@ export async function openChannel(c, opts = {}) {
   // cursor that is too low only replays idempotent events, one that is too high
   // silently drops them.
   store.cursor = Math.max(c.last_seq || 0, ordered.length ? ordered[ordered.length - 1].seq : 0);
+  cursorReady = true;             // 0 from here on means "the log is empty", not "unknown"
   store.oldestSeq = ordered.length ? ordered[0].seq : null;
   pagecache.remember(store.me, c.id, {
     msgs: visible, threads: await pThreads, cursor: store.cursor, oldestSeq: store.oldestSeq,
@@ -371,6 +448,7 @@ function paintCached(list, snap) {
   for (const m of rows) claimMessage(m);
   paintPage(list, rows);
   store.cursor = snap.cursor || 0;
+  cursorReady = true;             // a snapshot from disk is a real position too
   store.oldestSeq = snap.oldestSeq ?? (rows.length ? rows[0].seq : null);
 }
 
@@ -379,7 +457,25 @@ function paintCached(list, snap) {
 // is the whole point), a few new messages at the end (append them), or the cache
 // is older than one page so the two do not overlap at all (start again).
 function mergeIntoCached(list, fresh, snap) {
-  if (!fresh.length) return;
+  // The server says this channel has nothing visible in it. Whatever this phone
+  // is still showing was deleted or moved while it was away.
+  if (!fresh.length) {
+    if (!snap.msgs?.length) return;
+    // A message still being sent belongs to this person, not to the server's
+    // answer, so it stays.
+    for (const row of [...list.querySelectorAll('.msg')]) {
+      if (row.classList.contains('pending') || row.classList.contains('failed')) continue;
+      if (row.dataset.id) { store.seen.delete(row.dataset.id); store.msgCache.delete(row.dataset.id); }
+      row.remove();
+    }
+    resetWindow();
+    if (!list.querySelector('.msg')) {
+      for (const d of [...list.querySelectorAll('.daydiv')]) d.remove();
+      list.appendChild(el('div', 'empty',
+        `This is the beginning of <b>#${esc(store.current?.name || '')}</b>. Say hello.`));
+    }
+    return;
+  }
   const shownNewest = snap.msgs.length ? +(snap.msgs[snap.msgs.length - 1].seq || 0) : 0;
   const freshOldest = +(fresh[0].seq || 0);
   if (shownNewest && freshOldest > shownNewest + 1) {
@@ -404,9 +500,51 @@ function mergeIntoCached(list, fresh, snap) {
     if (!claimMessage(m)) continue;
     added.push(m);
   }
+
+  // A deletion that happened while the app was CLOSED leaves no trace in this
+  // page: get_channel_messages filters `deleted_at is null`, so the row the
+  // moderator removed is simply absent from the server's answer rather than
+  // present-and-tombstoned. Without this, the cached copy of it stays on screen
+  // for the whole session - measured: a message deleted while the app was shut
+  // came back on the next cold start and never left.
+  //
+  // The server's page is authoritative over the span it covers. Anything inside
+  // that span which this phone is showing and the server did not send is gone.
+  // Outside the span nothing is claimed, so older scrollback is left alone.
+  const lo = +(fresh[0].seq || 0);
+  const hi = +(fresh[fresh.length - 1].seq || 0);
+  if (lo && hi) {
+    const present = new Set(fresh.map((m) => m.id));
+    // Only the rows this phone actually drew into the channel are candidates.
+    // A thread reply the panel is holding, and anything outside the span, are
+    // none of this page's business.
+    for (const cm of snap.msgs || []) {
+      const s = +(cm.seq || 0);
+      if (!s || s < lo || s > hi) continue;   // optimistic rows have no seq
+      if (present.has(cm.id)) continue;
+      if (!shouldShowInChannel(cm)) continue;
+      if (store.msgCache.get(cm.id)?.deleted_at || cm.deleted_at) continue;
+      applyDelete(cm.id);
+    }
+  }
+
   if (!added.length) return;
   const stick = nearBottom();
-  renderBatch(list, added, 'channel');
+  // renderBatch appends: it is the fast path and it is only correct when every
+  // row being added is NEWER than everything already on screen, which is the
+  // ordinary case (the cache holds a page, the server sends the same page plus
+  // whatever arrived since). It is not correct when the stored page has a hole
+  // in it, and then a blind append prints the recovered older messages under the
+  // newer ones - permanently, until the channel is reopened. appendMessage does
+  // an ordered insert when it is not in bulk mode, so hand the odd case to it.
+  const newestShown = [...list.querySelectorAll('.msg')]
+    .reduce((mx, r) => Math.max(mx, +r.dataset.seq || 0), 0);
+  const oldestAdded = added.reduce((mn, m) => Math.min(mn, +(m.seq || Infinity)), Infinity);
+  if (newestShown && isFinite(oldestAdded) && oldestAdded < newestShown) {
+    for (const m of added) appendMessage(list, m, 'channel');
+  } else {
+    renderBatch(list, added, 'channel');
+  }
   capWindow(list);
   if (stick) scrollDown();
 }
@@ -464,7 +602,7 @@ function subscribeChannel(c) {
 function advanceOnEvent(eventSeq) {
   const s = +(eventSeq || 0);
   if (!s) return;
-  if (store.cursor && s > store.cursor + 1) { onGap(s, null); return; }
+  if (cursorReady && s > store.cursor + 1) { onGap(s, null); return; }
   store.cursor = Math.max(store.cursor, s);
 }
 
@@ -487,7 +625,7 @@ function onGap(seq, msg) {
 function onIncoming(m) {
   if (m.channel_id !== store.current?.id) return;
   const seq = +(m.seq || 0);
-  if (seq && store.cursor && seq > store.cursor + 1) { onGap(seq, m); return; }
+  if (seq && cursorReady && seq > store.cursor + 1) { onGap(seq, m); return; }
   applyIncoming(m);
 }
 
@@ -695,6 +833,13 @@ async function applyEvents(channelId, events, gen) {
     }
     if (!claimMessage(m)) continue;
     appendMessage($('messages'), m, 'channel');
+    // The cached page has to learn about a healed message too. It did not, and
+    // that left a HOLE in the middle of the stored page: a span recovered over
+    // resume() reached the screen but never the snapshot, so the next cold start
+    // painted [1..12, 21, 22] and then had to stitch the server's page across
+    // the missing 13..20. Measured: they landed at the bottom, under messages
+    // sent after them, and stayed there.
+    pagecache.note(store.me, channelId, m);
     bus.emit('message:new', { msg: m, healed: true });
   }
 
@@ -777,6 +922,7 @@ export async function jumpToSeq(channel, seq) {
     loadReactions(rows.map((m) => m.id)).catch(() => {});
     store.oldestSeq = rows[0].seq;
     store.cursor = rows[rows.length - 1].seq;
+    cursorReady = true;
     const target = rows.find((r) => r.seq === seq) || rows[Math.floor(rows.length / 2)];
     if (target?.id) jumpTo(target.id);
   } catch (e) { toast(e.message || 'Could not jump there', 'error'); }

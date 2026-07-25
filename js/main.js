@@ -7,7 +7,8 @@ import { $, el, esc } from './util.js';
 import ui, { toast, openPanel, closePanel, renderHeaderButtons, modal, closePopovers } from './ui.js';
 import { initAuth, showAuth, showChat, needsPasswordSetup, showSetPassword } from './core/auth.js';
 import { loadSpaces, switchWorkspace, spaceChooser, inviteDialog, copyInvite, extractToken } from './core/workspace.js';
-import { openChannel, renderChannels, wireScroll, refreshUnread, jumpToSeq } from './core/channels.js';
+import { openChannel, renderChannels, wireScroll, refreshUnread, jumpToSeq,
+  paintLastChannelFromCache } from './core/channels.js';
 import { initComposer, setReply, resolveMentions } from './core/composer.js';
 import { initPresence } from './core/presence.js';
 import { initVoice } from './core/voice.js';
@@ -84,11 +85,22 @@ function takePendingInvite() {
 async function enter() {
   const s = await session();
   if (!s) { showAuth(); return; }
+  // Before ANY round trip: draw the conversation this person was last reading,
+  // from this phone's own storage, into the shell that is about to be shown.
+  // Everything below - the password check, redeem_invite, the profile, the
+  // bootstrap, the message page - is between five and fifteen seconds of
+  // waiting on a bad line, and none of it is needed to show what they already
+  // had. Measured on Slow 3G / 4x CPU: 15.4s to a painted message without this.
+  store.me = s.user.id;
+  // Showing the shell here is safe precisely because there IS a cached page:
+  // only a user who has already signed in and finished any forced password
+  // setup can have one. If the check below disagrees, showAuth() takes the
+  // screen back.
+  if (await paintLastChannelFromCache().catch(() => false)) showChat();
   // A session restored from storage can still be sitting on the temporary
   // password it was provisioned with - reloading the page must not be a way
   // around the forced reset.
   if (await needsPasswordSetup()) { showAuth(); showSetPassword(s.user.email); return; }
-  store.me = s.user.id;
   sb.realtime.setAuth(s.access_token);
 
   // An invite in the URL is the whole multi-org story: open link, land in that Space.

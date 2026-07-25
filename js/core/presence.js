@@ -88,12 +88,18 @@ export function initPresence() {
     // first-run full fetch to do. Start the cursor slightly in the past to cover
     // anyone who joined between that snapshot and this loop starting.
     if (!memberCursor) memberCursor = new Date(Date.now() - 300000).toISOString();
+    // ASCENDING, and the cursor advances only to the last row actually consumed.
+    // Descending would take the 200 NEWEST joiners and then move the cursor past
+    // everyone older in the same window, so a Space that gains more than 200
+    // members between two ticks - a bulk provisioning run, which is exactly how
+    // these orgs onboard - would lose the earlier ones from the member list,
+    // mention autocomplete and the DM picker until a full reload.
     const mem = await table('workspace_members', (q) => q
       .eq('workspace_id', store.ws.id)
       .gt('joined_at', memberCursor)
-      .order('joined_at', { ascending: false })
+      .order('joined_at', { ascending: true })
       .limit(200));
-    if (mem.length) memberCursor = mem[0].joined_at;
+    if (mem.length) memberCursor = mem[mem.length - 1].joined_at;
     const unknown = mem.map((m) => m.user_id).filter((u) => !store.profiles.has(u));
     if (!unknown.length) return;
     const profs = await table('profiles', (q) => q.in('id', unknown));

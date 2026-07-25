@@ -43,7 +43,7 @@ export const api = {
     p_status_emoji: p.status_emoji ?? null, p_timezone: p.timezone ?? 'Asia/Kolkata',
   }),
   // The optional channel is the viewer census that feeds channels.viewer_count
-  // and therefore the digest safety valve (0056). It rides on the liveness beat
+  // and therefore the digest safety valve (0057). It rides on the liveness beat
   // so it costs no extra request. Null means "I am not looking at a channel".
   heartbeat: (status = 'online', channel = null) =>
     rpc('heartbeat', { p_status: status, p_channel: channel }),
