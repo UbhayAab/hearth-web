@@ -5,7 +5,7 @@ import { api, tryRpc } from './api.js';
 import { store, bus, nameOf } from './store.js';
 import { $, el, esc } from './util.js';
 import ui, { toast, openPanel, closePanel, renderHeaderButtons, modal, closePopovers } from './ui.js';
-import { initAuth, showAuth, showChat } from './core/auth.js';
+import { initAuth, showAuth, showChat, needsPasswordSetup, showSetPassword } from './core/auth.js';
 import { loadSpaces, switchWorkspace, spaceChooser, inviteDialog, copyInvite, extractToken } from './core/workspace.js';
 import { openChannel, renderChannels, wireScroll, refreshUnread, jumpToSeq } from './core/channels.js';
 import { initComposer, setReply, resolveMentions } from './core/composer.js';
@@ -16,6 +16,7 @@ import { registerCoreActions, registerCoreHeader } from './core/actions.js';
 import { openDM, startDM } from './core/dms.js';
 import { jumpTo, buildMessage } from './core/messages.js';
 import { initPWA, paintInstallButton } from './pwa.js';
+import { initTheme, openThemePicker, cycleTheme } from './theme.js';
 import { registerFeatures } from './features/index.js';
 
 // ------------------------------------------------------------------ routing
@@ -69,6 +70,10 @@ function takePendingInvite() {
 async function enter() {
   const s = await session();
   if (!s) { showAuth(); return; }
+  // A session restored from storage can still be sitting on the temporary
+  // password it was provisioned with - reloading the page must not be a way
+  // around the forced reset.
+  if (await needsPasswordSetup()) { showAuth(); showSetPassword(s.user.email); return; }
   store.me = s.user.id;
   sb.realtime.setAuth(s.access_token);
 
@@ -190,6 +195,8 @@ function initShortcuts() {
     if (e.key === 'Escape') { closePopovers(); if (!typing) closePanel(); return; }
     if (typing) return;
     if (e.key === '/') { e.preventDefault(); $('composer')?.focus(); }
+    // Shift+T cycles dark -> light -> colorful, for comparing them quickly.
+    if (e.shiftKey && e.key.toLowerCase() === 't') { e.preventDefault(); cycleTheme(); }
   });
 }
 
@@ -233,6 +240,7 @@ async function main() {
   const r = route();
   if (r.kind === 'join') stashPendingInvite(r.token);
 
+  initTheme();
   initAuth(enter);
   initComposer();
   initVoice();
@@ -249,6 +257,7 @@ async function main() {
   $('panelClose').onclick = closePanel;
   $('btnInvite').onclick = () => inviteDialog();
   $('btnSpaces').onclick = spaceChooser;
+  $('btnTheme').onclick = (e) => openThemePicker(e.currentTarget);
   $('btnMembersCount').onclick = () => openPanel('members');
   $('installBtn').onclick = () => import('./pwa.js').then((m) => m.promptInstall());
 

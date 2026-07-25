@@ -1,0 +1,340 @@
+/* ============================================================================
+   Hearth design tokens - the single source of truth for colour, type, space,
+   radius, elevation and motion. Nothing else in the codebase may hardcode a
+   colour or a pixel spacing value; it references a token from here.
+
+   THREE THEMES, set with data-theme on <html>:
+     dark      calm, low-glare, for long sessions and night work
+     light     clean and paper-like for bright rooms and projectors
+     colorful  the Slack look: a deep aubergine sidebar against a light content
+               area. This is why sidebar colours are a SEPARATE token set from
+               surface colours - in colorful mode the sidebar is dark while the
+               message list is light, and a single palette cannot express that.
+
+   Naming: --c-* colour, --s-* space, --r-* radius, --e-* elevation,
+           --t-* type, --z-* z-index, --m-* motion.
+   ========================================================================= */
+
+:root {
+  /* ---------------------------------------------------------------- space
+     A 4px base scale. Every margin, padding and gap comes from here so
+     vertical rhythm stays consistent across surfaces built by different hands. */
+  --s-0: 0;
+  --s-1: 2px;
+  --s-2: 4px;
+  --s-3: 6px;
+  --s-4: 8px;
+  --s-5: 12px;
+  --s-6: 16px;
+  --s-7: 20px;
+  --s-8: 24px;
+  --s-9: 32px;
+  --s-10: 40px;
+  --s-11: 48px;
+  --s-12: 64px;
+
+  /* ---------------------------------------------------------------- radius */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-2xl: 22px;
+  --r-full: 999px;
+
+  /* ---------------------------------------------------------------- type
+     Slack's readability comes from a compact scale with generous line height
+     on body copy and tight line height on UI chrome. */
+  --t-font: "Inter var", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --t-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+  --t-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+
+  --t-2xs: 10.5px;
+  --t-xs: 11.5px;
+  --t-sm: 12.5px;
+  --t-base: 14px;
+  --t-md: 15px;
+  --t-lg: 17px;
+  --t-xl: 20px;
+  --t-2xl: 24px;
+  --t-3xl: 30px;
+
+  --t-tight: 1.25;
+  --t-snug: 1.4;
+  --t-body: 1.52;
+  --t-loose: 1.65;
+
+  --t-normal: 400;
+  --t-medium: 500;
+  --t-semibold: 600;
+  --t-bold: 700;
+  --t-black: 800;
+
+  /* ---------------------------------------------------------------- motion
+     Short and eased. Anything longer than 200ms on a hover feels laggy; the
+     spring is reserved for things that travel across the screen. */
+  --m-fast: 90ms;
+  --m-base: 140ms;
+  --m-slow: 220ms;
+  --m-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --m-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --m-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---------------------------------------------------------------- z-index
+     Named so nothing invents its own number and ends up under a modal. */
+  --z-nav: 20;
+  --z-sticky: 30;
+  --z-drawer: 60;
+  --z-panel: 70;
+  --z-dropdown: 140;
+  --z-modal: 150;
+  --z-popover: 160;
+  --z-lightbox: 200;
+  --z-toast: 300;
+
+  /* ---------------------------------------------------------------- layout */
+  --rail-w: 68px;
+  --sidebar-w: 260px;
+  --panel-w: 400px;
+  --gutter: 40px;      /* avatar column in the message list */
+  --header-h: 48px;
+}
+
+/* ============================================================================
+   DARK - the default. Warm-neutral greys rather than blue-greys, so long
+   sessions feel less clinical, with a single blue accent.
+   ========================================================================= */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-bg: #14161a;
+  --c-surface: #1a1d22;
+  --c-surface-2: #21252c;
+  --c-surface-3: #2a2f37;
+  --c-overlay: #21252c;
+
+  --c-text: #e8eaed;
+  --c-text-2: #a4acb9;
+  --c-text-3: #6f7885;
+  --c-text-inverse: #14161a;
+
+  --c-border: #2b3038;
+  --c-border-strong: #3a4051;
+  --c-border-subtle: #22262d;
+
+  --c-accent: #5b8cff;
+  --c-accent-hover: #7aa2ff;
+  --c-accent-quiet: #5b8cff1f;
+  --c-accent-text: #ffffff;
+
+  --c-success: #3ecf8e;
+  --c-success-quiet: #3ecf8e1f;
+  --c-warn: #e0a44a;
+  --c-warn-quiet: #e0a44a1f;
+  --c-danger: #ec5f52;
+  --c-danger-quiet: #ec5f521f;
+
+  --c-mention: #3a2f12;
+  --c-mention-edge: #e0a44a;
+  --c-own: transparent;
+  --c-hover: #1e2127;
+  --c-selected: #23304a;
+
+  /* sidebar + rail: in dark mode they are simply a touch deeper than content */
+  --c-nav-bg: #101216;
+  --c-nav-bg-2: #16191e;
+  --c-nav-text: #c6cdd8;
+  --c-nav-text-2: #7d8593;
+  --c-nav-text-active: #ffffff;
+  --c-nav-hover: #1e222a;
+  --c-nav-active: #2f3d5c;
+  --c-nav-border: #24282f;
+  --c-nav-brand: #e8eaed;
+
+  --e-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --e-2: 0 3px 8px rgba(0, 0, 0, 0.45);
+  --e-3: 0 10px 28px rgba(0, 0, 0, 0.5);
+  --e-4: 0 22px 60px rgba(0, 0, 0, 0.6);
+  --e-ring: 0 0 0 2px var(--c-bg), 0 0 0 4px var(--c-accent);
+
+  --c-scrim: rgba(0, 0, 0, 0.62);
+  --c-code-bg: #0e1014;
+  --c-skeleton: linear-gradient(90deg, #1e2127 25%, #262a32 50%, #1e2127 75%);
+}
+
+/* ============================================================================
+   LIGHT - paper white content, crisp hairlines, the same blue accent so the
+   brand does not shift between themes.
+   ========================================================================= */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --c-bg: #ffffff;
+  --c-surface: #f8f9fb;
+  --c-surface-2: #f1f3f7;
+  --c-surface-3: #e7eaf0;
+  --c-overlay: #ffffff;
+
+  --c-text: #1a1d23;
+  --c-text-2: #5b6472;
+  --c-text-3: #8b94a3;
+  --c-text-inverse: #ffffff;
+
+  --c-border: #e2e6ee;
+  --c-border-strong: #ccd2de;
+  --c-border-subtle: #eef1f6;
+
+  --c-accent: #2f6fed;
+  --c-accent-hover: #245ad1;
+  --c-accent-quiet: #2f6fed14;
+  --c-accent-text: #ffffff;
+
+  --c-success: #16a06a;
+  --c-success-quiet: #16a06a14;
+  --c-warn: #c07c12;
+  --c-warn-quiet: #c07c1214;
+  --c-danger: #d33b2c;
+  --c-danger-quiet: #d33b2c14;
+
+  --c-mention: #fff8e6;
+  --c-mention-edge: #e5a13a;
+  --c-own: transparent;
+  --c-hover: #f5f7fa;
+  --c-selected: #e4edff;
+
+  --c-nav-bg: #f5f6f9;
+  --c-nav-bg-2: #eef0f5;
+  --c-nav-text: #454c58;
+  --c-nav-text-2: #7a8290;
+  --c-nav-text-active: #14161a;
+  --c-nav-hover: #e7eaf1;
+  --c-nav-active: #d8e4fb;
+  --c-nav-border: #e2e6ee;
+  --c-nav-brand: #1a1d23;
+
+  --e-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --e-2: 0 3px 8px rgba(16, 24, 40, 0.09);
+  --e-3: 0 10px 28px rgba(16, 24, 40, 0.12);
+  --e-4: 0 22px 60px rgba(16, 24, 40, 0.18);
+  --e-ring: 0 0 0 2px var(--c-bg), 0 0 0 4px var(--c-accent);
+
+  --c-scrim: rgba(24, 28, 36, 0.45);
+  --c-code-bg: #f5f7fa;
+  --c-skeleton: linear-gradient(90deg, #eef1f6 25%, #f7f9fc 50%, #eef1f6 75%);
+}
+
+/* ============================================================================
+   COLORFUL - the Slack signature. A deep aubergine sidebar carrying the brand,
+   against a light, quiet content area so the messages stay readable all day.
+   The colour lives in the chrome, never behind the text people are reading.
+   ========================================================================= */
+:root[data-theme="colorful"] {
+  color-scheme: light;
+
+  --c-bg: #ffffff;
+  --c-surface: #f7f6f9;
+  --c-surface-2: #f0eef4;
+  --c-surface-3: #e6e2ec;
+  --c-overlay: #ffffff;
+
+  --c-text: #1d1c1d;
+  --c-text-2: #5c5a60;
+  --c-text-3: #8b878f;
+  --c-text-inverse: #ffffff;
+
+  --c-border: #e4e0ea;
+  --c-border-strong: #cec8d6;
+  --c-border-subtle: #efecf3;
+
+  --c-accent: #1264a3;
+  --c-accent-hover: #0b4f82;
+  --c-accent-quiet: #1264a314;
+  --c-accent-text: #ffffff;
+
+  --c-success: #007a5a;
+  --c-success-quiet: #007a5a14;
+  --c-warn: #b8860b;
+  --c-warn-quiet: #b8860b14;
+  --c-danger: #b8352c;
+  --c-danger-quiet: #b8352c14;
+
+  --c-mention: #fdf6e3;
+  --c-mention-edge: #e0a44a;
+  --c-own: transparent;
+  --c-hover: #f6f4f8;
+  --c-selected: #e8f2fb;
+
+  /* the aubergine */
+  --c-nav-bg: #3f0e40;
+  --c-nav-bg-2: #350d36;
+  --c-nav-text: #cfc3cf;
+  --c-nav-text-2: #ab9cab;
+  --c-nav-text-active: #ffffff;
+  --c-nav-hover: #522653;
+  --c-nav-active: #1164a3;
+  --c-nav-border: #522753;
+  --c-nav-brand: #ffffff;
+
+  --e-1: 0 1px 2px rgba(29, 28, 29, 0.08);
+  --e-2: 0 3px 8px rgba(29, 28, 29, 0.11);
+  --e-3: 0 10px 28px rgba(29, 28, 29, 0.14);
+  --e-4: 0 22px 60px rgba(29, 28, 29, 0.2);
+  --e-ring: 0 0 0 2px var(--c-bg), 0 0 0 4px var(--c-accent);
+
+  --c-scrim: rgba(29, 28, 29, 0.45);
+  --c-code-bg: #f7f5f9;
+  --c-skeleton: linear-gradient(90deg, #f0eef4 25%, #f8f6fa 50%, #f0eef4 75%);
+}
+
+/* Respect the OS when the user has expressed no preference of their own.
+   main.js writes data-theme as soon as it knows; this covers first paint. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --c-bg: #ffffff;
+    --c-surface: #f8f9fb;
+    --c-surface-2: #f1f3f7;
+    --c-surface-3: #e7eaf0;
+    --c-overlay: #ffffff;
+    --c-text: #1a1d23;
+    --c-text-2: #5b6472;
+    --c-text-3: #8b94a3;
+    --c-border: #e2e6ee;
+    --c-border-strong: #ccd2de;
+    --c-border-subtle: #eef1f6;
+    --c-accent: #2f6fed;
+    --c-hover: #f5f7fa;
+    --c-nav-bg: #f5f6f9;
+    --c-nav-text: #454c58;
+    --c-nav-border: #e2e6ee;
+    --c-nav-brand: #1a1d23;
+    --c-code-bg: #f5f7fa;
+    --c-scrim: rgba(24, 28, 36, 0.45);
+  }
+}
+
+/* People who ask the OS for less motion get none of the decorative kind. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --m-fast: 1ms;
+    --m-base: 1ms;
+    --m-slow: 1ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Higher contrast for users who ask for it: firm up the hairlines. */
+@media (prefers-contrast: more) {
+  :root {
+    --c-border: var(--c-border-strong);
+    --c-text-2: var(--c-text);
+  }
+}

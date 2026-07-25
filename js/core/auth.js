@@ -3,7 +3,7 @@
 // cooldown, because a code screen that silently does nothing is the fastest way
 // to lose someone at the door.
 import { sb, session } from '../sb.js';
-import { api } from '../api.js';
+import { api, tryRpc } from '../api.js';
 import { store } from '../store.js';
 import { $, el, esc } from '../util.js';
 import { toast } from '../ui.js';
@@ -71,6 +71,57 @@ export function initAuth(onSignedIn) {
       busy(btn, false);
     }
   };
+
+  // ---- password sign-in ----
+  // The interim path while the organisations finish their own mailer: accounts
+  // are provisioned in bulk with a temporary password, and the first sign-in
+  // forces a real one.
+  const passwordSignIn = async () => {
+    const email = $('email').value.trim();
+    const password = $('password').value;
+    if (!/^\S+@\S+\.\S+$/.test(email)) return authError('Enter a valid email address');
+    if (!password) return authError('Enter your password');
+    const btn = $('pwSignIn');
+    busy(btn, true);
+    authError('');
+    try {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (await needsPasswordSetup()) { showSetPassword(email); return; }
+      await onSignedIn();
+    } catch (e) {
+      authError(/invalid login/i.test(e.message || '')
+        ? 'That email and password do not match. Check with whoever set up your account.'
+        : e.message);
+      busy(btn, false);
+    }
+  };
+  $('pwSignIn').onclick = passwordSignIn;
+  $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') passwordSignIn(); });
+
+  // ---- forced password change ----
+  const savePassword = async () => {
+    const a = $('newPw').value;
+    const b = $('newPw2').value;
+    if (a.length < 8) return authError('Use at least 8 characters');
+    if (a !== b) return authError('Those two passwords do not match');
+    const btn = $('pwSave');
+    busy(btn, true);
+    authError('');
+    try {
+      const { error } = await sb.auth.updateUser({ password: a });
+      if (error) throw error;
+      // Only drop the latch once GoTrue has actually accepted the new password.
+      await api.completePasswordSetup();
+      await onSignedIn();
+    } catch (e) {
+      authError(e.message || 'Could not set that password');
+      busy(btn, false);
+    }
+  };
+  $('pwSave').onclick = savePassword;
+  $('newPw2').addEventListener('keydown', (e) => { if (e.key === 'Enter') savePassword(); });
+  $('newPw').addEventListener('input', () => paintStrength($('newPw').value));
 
   // ---- request a code ----
   const sendCode = async () => {
@@ -162,6 +213,38 @@ function startCooldown() {
   tick();
 }
 function stopCooldown() { if (resendTimer) { clearTimeout(resendTimer); resendTimer = null; } }
+
+// Whether this session is still on a provisioned temporary password. Failing
+// open would be wrong in the other direction: if the check itself errors we do
+// NOT trap someone on the reset screen, we let them in and they keep the latch
+// until the next sign-in.
+export async function needsPasswordSetup() {
+  const [flag] = await tryRpc('must_set_password', {});
+  return flag === true;
+}
+
+export function showSetPassword(email) {
+  hide('emailStep');
+  hide('otpStep');
+  show('setPwStep');
+  $('pwWho').textContent = email ? `, ${email}` : '';
+  authError('');
+  setTimeout(() => $('newPw').focus(), 40);
+}
+
+// A calm strength hint rather than a scolding validator: length is what actually
+// matters, with a nudge for variety.
+function paintStrength(v) {
+  const meter = $('pwMeter');
+  if (!meter) return;
+  let score = 0;
+  if (v.length >= 8) score++;
+  if (v.length >= 12) score++;
+  if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++;
+  if (/\d/.test(v) || /[^\w\s]/.test(v)) score++;
+  meter.dataset.score = String(score);
+  meter.querySelector('i').style.width = `${(score / 4) * 100}%`;
+}
 
 export async function currentUser() {
   const s = await session();

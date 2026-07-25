@@ -1,0 +1,1143 @@
+/* ============================================================================
+   PANELS - everything inside the right-hand aside, plus the admin surfaces
+   (admin console, roles, moderation, onboarding gates, invites, the Space
+   chooser and the profile card).
+
+   The shell itself - aside#panel, its <header>, its <footer>, the width, and
+   the full-screen drawer behaviour on phones - belongs to layout.css. This
+   file starts at #panelContent and works inwards.
+
+   Two NGOs administer real people through these screens, so the bias
+   throughout is: dense enough to scan a hundred rows, loose enough to read
+   one. Destructive actions get a moat of whitespace and a solid fill; safe
+   ones stay quiet.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+   COMPATIBILITY SHIM - read this before editing anything below.
+
+   Four feature modules (admin.js, roles.js, moderation.js, onboarding.js)
+   inject a <style> element into <head> at runtime. Those blocks were written
+   against the retired styles.css palette and still say var(--panel),
+   var(--line), var(--dim), var(--faint) and friends. Because they are injected
+   into the head they land AFTER this file in the cascade, so at equal
+   specificity they win - and every one of those variables is now undefined,
+   which makes the whole declaration compute to `unset`: no border, no
+   background, inherited text colour.
+
+   Two things fix that, and both are needed:
+
+   1. This block re-points the retired names at real tokens, scoped to the
+      roots those features render into. Custom properties inherit, so every
+      injected rule underneath resolves to a live, theme-correct colour. It is
+      a safety net for the declarations this file does not restate.
+   2. Every rule below that has to beat an injected one carries an extra
+      `body ` or an id. That is the whole reason for the otherwise redundant
+      prefixes - not specificity for its own sake, and never !important.
+
+   The right long-term fix is to delete the injected CSS from the JS. Until
+   then, this shim keeps all three themes honest.
+   --------------------------------------------------------------------------- */
+#panelContent,
+.roles-grid,
+.roles-pick,
+.onb-rules,
+.mod-note {
+  --panel: var(--c-surface);
+  --panel2: var(--c-surface-2);
+  --panel3: var(--c-surface-3);
+  --line: var(--c-border);
+  --text: var(--c-text);
+  --dim: var(--c-text-2);
+  --faint: var(--c-text-2);
+  --accent: var(--c-accent);
+  --red: var(--c-danger);
+  --green: var(--c-success);
+  --amber: var(--c-warn);
+  --me: var(--c-selected);
+}
+
+/* ============================================================================
+   1. PANEL BODY RHYTHM
+   ========================================================================= */
+
+/* layout.css may also match this element as `aside#panel .content`, which
+   carries an id of its own. The extra id here keeps the body rhythm with the
+   file that owns the body. */
+#panel #panelContent {
+  padding: var(--s-5) var(--s-5) var(--s-10);
+  min-width: 0;
+  /* Nothing inside a panel may widen the page - long words, tables and code
+     scroll inside their own container instead. */
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Search fields that a panel drops in as its own first child. */
+#panelContent > input,
+body .admin-tabbody > input,
+body .roles-root > input {
+  margin-bottom: var(--s-5);
+}
+
+/* ------------------------------------------------------------------ section headings
+   Small, uppercase, wide-tracked. The one piece of chrome that tells you where
+   you are in a long panel, so it is text-2 rather than text-3 - text-3 on a
+   panel surface lands at 3.7:1 and fails AA at this size. */
+h4.sec {
+  margin: var(--s-8) 0 var(--s-3);
+  color: var(--c-text-2);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-bold);
+  letter-spacing: 0.07em;
+  line-height: var(--t-tight);
+  text-transform: uppercase;
+}
+#panelContent > h4.sec:first-child,
+body .admin-tabbody > h4.sec:first-child {
+  margin-top: 0;
+}
+
+/* ============================================================================
+   2. RESULT ROWS - search, activity, pins, saved, reports, integrations
+   ========================================================================= */
+.result {
+  padding: var(--s-4) var(--s-5);
+  border-radius: var(--r-md);
+  color: var(--c-text);
+  cursor: pointer;
+  transition: background-color var(--m-fast) var(--m-ease);
+}
+.result + .result {
+  /* An inset hairline instead of a border so the rounded hover fill is not
+     cut across by a straight line at its top edge. */
+  box-shadow: inset 0 1px 0 var(--c-border-subtle);
+}
+.result:hover { background: var(--c-hover); }
+.result:active { background: var(--c-surface-2); }
+.result:focus-visible { background: var(--c-hover); }
+
+/* The byline: an 18px avatar, a name, a channel and a timestamp on one line. */
+.result > .muted:first-child {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  line-height: var(--t-snug);
+}
+.result > .muted:first-child b {
+  color: var(--c-text);
+  font-weight: var(--t-semibold);
+}
+.result .avatar { flex: none; }
+
+.result .body {
+  margin-top: var(--s-2);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  line-height: var(--t-body);
+  overflow-wrap: anywhere;
+}
+/* Message bodies can carry a code block; it scrolls inside itself. */
+.result .body pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Pins and Later append their controls straight onto the card. */
+.result > button,
+.result > .row {
+  margin-top: var(--s-4);
+}
+.result > .row {
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+/* ============================================================================
+   3. SEARCH BOX
+   ========================================================================= */
+.search-box { margin-bottom: var(--s-6); }
+
+.search-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  line-height: var(--t-snug);
+}
+.search-hint code {
+  padding: 1px var(--s-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xs);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-family: var(--t-mono);
+  font-size: var(--t-2xs);
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   4. MEMBERS
+   ========================================================================= */
+.member {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  min-height: 40px;
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-md);
+  color: var(--c-text);
+  font-size: var(--t-base);
+  cursor: pointer;
+  transition: background-color var(--m-fast) var(--m-ease);
+}
+.member:hover { background: var(--c-hover); }
+.member:active { background: var(--c-surface-2); }
+.member .avatar { flex: none; }
+
+.m-name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  font-weight: var(--t-medium);
+}
+/* Status text is the only part allowed to be cut off. */
+.m-name .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--t-sm);
+  font-weight: var(--t-normal);
+}
+
+/* Presence dots. components.css owns the global .dot; these scoped rules only
+   guarantee the geometry and the on/off colour inside the surfaces this file
+   is responsible for. */
+.member .dot,
+.profile-card .dot,
+body .admin-table .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  flex: none;
+  display: inline-block;
+}
+.member .dot.on,
+.profile-card .dot.on,
+body .admin-table .dot.on { background: var(--c-success); }
+.member .dot.off,
+.profile-card .dot.off,
+body .admin-table .dot.off { background: var(--c-text-3); }
+
+/* ============================================================================
+   5. ROLE CHIPS
+   A tiny label that shows up in member rows, the admin table and the profile
+   card. Not claimed by another file at the time of writing; features.css loads
+   after this one and can refine it without a fight.
+   ========================================================================= */
+.rolechip {
+  display: inline-block;
+  margin-left: var(--s-2);
+  padding: 0 var(--s-3);
+  border-radius: var(--r-full);
+  background: var(--c-surface-3);
+  color: var(--c-text-2);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-semibold);
+  line-height: 1.7;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+/* ============================================================================
+   6. PROFILE CARD  (opens in a modal)
+   ========================================================================= */
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.pc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  min-width: 0;
+}
+.pc-head .avatar { flex: none; }
+.pc-head > div { min-width: 0; }
+.pc-head b {
+  display: block;
+  color: var(--c-text);
+  font-size: var(--t-xl);
+  font-weight: var(--t-semibold);
+  letter-spacing: -0.01em;
+  line-height: var(--t-tight);
+}
+.pc-head .muted {
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  line-height: var(--t-snug);
+}
+
+/* Status line: emoji, free text, presence and role chips, wrapping together. */
+.profile-card #pcStatus,
+.pc-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  /* A hairline as well as a fill: inside a modal, --c-surface-2 and
+     --c-overlay are the same colour in the dark theme, so the fill alone
+     would leave this strip invisible there. */
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  line-height: var(--t-snug);
+}
+.profile-card #pcStatus:empty,
+.pc-status:empty { display: none; }
+.profile-card #pcStatus .rolechip,
+.pc-status .rolechip { margin-left: 0; }
+
+.pc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+}
+/* Your own card has no actions on it at all. */
+.pc-actions:empty { display: none; }
+.pc-actions button {
+  flex: 1 1 auto;
+  min-height: 40px;
+}
+/* Ban sits next to Message. Give it its own space so a fat thumb cannot
+   arrive there by accident. It keeps the solid fill: this is a single
+   deliberate decision about one person, not a repeated row action. */
+.pc-actions button.danger { margin-left: var(--s-4); }
+
+/* ============================================================================
+   7. INVITES  (modal, and the admin Invites tab)
+   ========================================================================= */
+.invite-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+.invite-box > p {
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  line-height: var(--t-body);
+}
+.invite-box > p b { color: var(--c-text); }
+
+/* The generated link, ready to copy: monospace, full width, one tap to select. */
+.invite-row,
+body .admin-linkrow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+.invite-row input,
+body .admin-linkrow input {
+  flex: 1;
+  min-width: 0;
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-family: var(--t-mono);
+  font-size: var(--t-sm);
+  text-overflow: ellipsis;
+}
+.invite-row input:read-only,
+body .admin-linkrow input:read-only {
+  /* Readonly does not mean disabled here - the whole point is to select it. */
+  cursor: text;
+  opacity: 1;
+}
+.invite-row button,
+body .admin-linkrow button { flex: none; }
+
+.invite-opts {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--s-5);
+  padding: var(--s-6);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface-2);
+}
+.invite-opts .field {
+  flex: 1 1 140px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.invite-opts button { flex: none; }
+
+.invite-list { margin-top: var(--s-2); }
+.inv-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-1);
+  border-top: 1px solid var(--c-border-subtle);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+}
+.inv-row span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  color: var(--c-text-2);
+}
+
+/* ============================================================================
+   8. SPACE CHOOSER - create vs join
+   Two big cards. These are <button> elements, so the rules here have to out-
+   rank the generic button styling in components.css; a class beats a type.
+   ========================================================================= */
+.chooser {
+  display: grid;
+  /* minmax(0,...) rather than a bare 1fr: a grid item's automatic minimum is
+     its min-content width, and a <button> will happily report that as the full
+     unwrapped sentence and push itself past the modal. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-5);
+}
+.chooser-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-6);
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  padding: var(--s-7);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-weight: var(--t-normal);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--m-base) var(--m-ease),
+              border-color var(--m-base) var(--m-ease),
+              transform var(--m-fast) var(--m-ease);
+}
+.chooser-card:hover {
+  border-color: var(--c-accent);
+  background: var(--c-accent-quiet);
+  transform: translateY(-1px);
+}
+.chooser-card:active {
+  transform: none;
+  background: var(--c-surface-3);
+}
+.chooser-card:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+.chooser-card > div { min-width: 0; }
+.chooser-card b {
+  display: block;
+  color: var(--c-text);
+  font-size: var(--t-md);
+  font-weight: var(--t-semibold);
+  line-height: var(--t-tight);
+}
+.chooser-card .muted {
+  margin-top: var(--s-3);
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  font-weight: var(--t-normal);
+  line-height: var(--t-body);
+}
+.cc-ico {
+  font-size: var(--t-2xl);
+  line-height: 1;
+  font-family: var(--t-emoji);
+}
+
+/* ============================================================================
+   9. ADMIN CONSOLE
+   Every selector in this section carries `body` so it lands after the runtime
+   <style> that admin.js injects. See the shim note at the top of the file.
+   ========================================================================= */
+body .admin-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ tab bar
+   Underlined tabs rather than a filled segmented track: an underline reads the
+   same in all three themes without depending on what colour layout.css gives
+   the panel behind it. Scrolls sideways on a phone rather than wrapping to
+   two ragged lines. */
+body .admin-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--s-6);
+  /* the injected rule pins this; static keeps it from floating over content
+     on a background that may not match the panel */
+  position: static;
+  margin: 0 0 var(--s-3);
+  padding: 0;
+  border-bottom: 1px solid var(--c-border);
+  background: transparent;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+body .admin-tabs::-webkit-scrollbar { display: none; }
+
+body .admin-tabs button {
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--s-1);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  font-weight: var(--t-semibold);
+  white-space: nowrap;
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: color var(--m-fast) var(--m-ease);
+}
+body .admin-tabs button:hover {
+  background: transparent;
+  color: var(--c-text);
+  box-shadow: inset 0 -2px 0 var(--c-border-strong);
+}
+body .admin-tabs button:active { color: var(--c-text); }
+body .admin-tabs button:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: -2px;
+}
+/* admin.js marks the inactive tabs with .ghost, so the active one is the tab
+   that has no modifier at all. */
+body .admin-tabs button:not(.ghost),
+body .admin-tabs button:not(.ghost):hover {
+  background: transparent;
+  color: var(--c-text);
+  box-shadow: inset 0 -2px 0 var(--c-accent);
+}
+
+body .admin-tabbody { min-width: 0; }
+
+/* ------------------------------------------------------------------ stat cards */
+body .admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--s-5);
+  margin-bottom: var(--s-3);
+}
+body .admin-stat {
+  padding: var(--s-6);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface-2);
+}
+body .admin-stat b {
+  display: block;
+  color: var(--c-text);
+  font-size: var(--t-3xl);
+  font-weight: var(--t-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+body .admin-stat span {
+  display: block;
+  margin-top: var(--s-2);
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  font-weight: var(--t-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------ tables
+   The table is bounded and scrolls in both axes inside its own box. That is
+   what makes the sticky header row mean anything, and it is what stops a six
+   column roster from widening a 360px phone. */
+body .admin-scroll {
+  max-width: 100%;
+  max-height: min(58dvh, 520px);
+  overflow: auto;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+body .admin-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: var(--t-sm);
+}
+body .admin-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--s-4) var(--s-5);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-bold);
+  letter-spacing: 0.07em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 0;
+  /* a sticky cell leaves its border behind when it detaches; an inset shadow
+     travels with it */
+  box-shadow: inset 0 -1px 0 var(--c-border);
+}
+body .admin-table td {
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--c-border-subtle);
+  color: var(--c-text);
+  vertical-align: middle;
+}
+body .admin-table tbody tr:last-child td { border-bottom: 0; }
+body .admin-table tbody tr:hover td { background: var(--c-hover); }
+body .admin-table td b {
+  color: var(--c-text);
+  font-weight: var(--t-semibold);
+}
+body .admin-table td.muted { color: var(--c-text-2); }
+body .admin-table td .muted {
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+}
+body .admin-nowrap { white-space: nowrap; }
+/* The action column hugs its buttons on the right edge. */
+body .admin-table td:last-child {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+body .admin-acts {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+/* ------------------------------------------------------------------ destructive rows
+   A moat before anything irreversible. Kick is recoverable, Ban is not, and
+   they must not sit shoulder to shoulder in a roster of real staff.
+
+   Row-level destructive actions are outlined rather than filled. A column of
+   solid red buttons down a sixty-person roster stops reading as a warning and
+   starts reading as decoration; outlined, the one red thing in a row is the
+   thing that cannot be undone. The fill arrives on hover, so the instant
+   before the click is unmistakable, and it is kept outright for the one-off
+   deliberate actions (the profile card, "Leave this Space").
+
+   The fill is --c-bg rather than transparent or --c-surface-2 on purpose:
+   --c-danger only just clears 4.5:1 in the light theme, and it clears it
+   against the base background and nothing lighter. Pinning the button to
+   --c-bg keeps the ratio fixed at 4.7:1 or better in all three themes no
+   matter what the row underneath paints on hover. */
+body .admin-acts button.danger,
+body .roles-acts button.danger,
+body .mod-actions button.danger,
+body .admin-line button.danger,
+body .mod-line button.danger {
+  margin-left: var(--s-4);
+  border: 1px solid color-mix(in srgb, var(--c-danger) 45%, transparent);
+  background: var(--c-bg);
+  color: var(--c-danger);
+  transition: background-color var(--m-fast) var(--m-ease),
+              border-color var(--m-fast) var(--m-ease),
+              color var(--m-fast) var(--m-ease);
+}
+body .admin-acts button.danger:hover,
+body .roles-acts button.danger:hover,
+body .mod-actions button.danger:hover,
+body .admin-line button.danger:hover,
+body .mod-line button.danger:hover {
+  border-color: var(--c-danger);
+  background: var(--c-danger);
+  color: var(--c-text-inverse);
+}
+body .admin-acts button.danger:disabled,
+body .roles-acts button.danger:disabled,
+body .mod-actions button.danger:disabled,
+body .admin-line button.danger:disabled,
+body .mod-line button.danger:disabled {
+  border-color: var(--c-border);
+  background: var(--c-bg);
+  color: var(--c-text-3);
+}
+
+/* ------------------------------------------------------------------ list lines
+   Bans, invites and the audit log. Denser than a .result, still one clear row. */
+body .admin-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  row-gap: var(--s-2);
+  padding: var(--s-4) var(--s-3);
+  border-bottom: 1px solid var(--c-border-subtle);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  line-height: var(--t-snug);
+}
+body .admin-line:last-child { border-bottom: 0; }
+body .admin-line > span { min-width: 0; }
+body .admin-line b { font-weight: var(--t-semibold); }
+body .admin-line .muted { color: var(--c-text-2); }
+body .admin-line .admin-when {
+  margin-left: auto;
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ inline forms */
+body .admin-form {
+  margin-bottom: var(--s-6);
+  padding: var(--s-6);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+}
+body .admin-form .muted {
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  line-height: var(--t-body);
+}
+body .admin-form .muted b { color: var(--c-text); }
+body .admin-form .field {
+  flex: 1 1 130px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+body .admin-form .row.gap {
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+}
+body .admin-linkrow { margin-top: var(--s-5); }
+
+/* ============================================================================
+   10. ROLES AND USER GROUPS
+   Same `body` prefix rule as the admin console - roles.js injects its own CSS.
+   .roles-grid and .roles-pick also render inside a modal, which is why these
+   are not scoped to #panelContent.
+   ========================================================================= */
+body .roles-root {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+body .roles-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin: var(--s-8) 0 var(--s-3);
+}
+body .roles-head h4 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--c-text-2);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-bold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+body .roles-root > .roles-head:first-child { margin-top: 0; }
+
+body .roles-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-height: 44px;
+  padding: var(--s-4) var(--s-3);
+  border-bottom: 1px solid var(--c-border-subtle);
+  color: var(--c-text);
+  transition: background-color var(--m-fast) var(--m-ease);
+}
+body .roles-row:hover { background: var(--c-hover); }
+
+/* The swatch carries the role colour as an inline style. A ring keeps it
+   legible when that colour is dark, transparent or simply missing. */
+body .roles-swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--r-full);
+  box-shadow: inset 0 0 0 1px var(--c-border-strong);
+}
+body .roles-name {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-text);
+  font-size: var(--t-base);
+  font-weight: var(--t-semibold);
+}
+body .roles-meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+}
+body .roles-chiprow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: nowrap;
+}
+body .roles-chiprow .rolechip { margin-left: 0; }
+body .roles-acts {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex: none;
+}
+
+/* ------------------------------------------------------------------ permission grid
+   Two scannable columns on a desktop, one on a phone. Each row is a real
+   44px target, and a ticked permission is filled so a granted set can be read
+   at a glance instead of counted. */
+body .roles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  margin: var(--s-3) 0 var(--s-2);
+}
+body .roles-perm {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-height: 44px;
+  padding: var(--s-3) var(--s-5);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  cursor: pointer;
+  transition: background-color var(--m-fast) var(--m-ease),
+              border-color var(--m-fast) var(--m-ease);
+}
+body .roles-perm:hover {
+  border-color: var(--c-border-strong);
+  background: var(--c-surface-3);
+}
+body .roles-perm:has(input:checked) {
+  border-color: var(--c-accent);
+  background: var(--c-accent-quiet);
+  font-weight: var(--t-medium);
+}
+body .roles-perm:focus-within {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+body .roles-perm input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--c-accent);
+  cursor: pointer;
+}
+body .roles-perm-off {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+body .roles-perm-off:hover {
+  border-color: var(--c-border);
+  background: var(--c-surface-2);
+}
+body .roles-perm-off input { cursor: not-allowed; }
+
+body .roles-pick {
+  display: grid;
+  gap: var(--s-2);
+  max-height: min(46dvh, 340px);
+  margin-top: var(--s-5);
+  padding-right: var(--s-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ============================================================================
+   11. MODERATION
+   ========================================================================= */
+body .mod-sec { margin-bottom: var(--s-9); }
+body .mod-sec:last-child { margin-bottom: 0; }
+
+body .mod-sec .sec,
+body .onb-sec .sec {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin: 0 0 var(--s-3);
+  color: var(--c-text-2);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-bold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+body .mod-sec .sec .sp,
+body .onb-sec .sec .sp { flex: 1; }
+
+body .mod-actions,
+body .onb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+}
+
+body .mod-line,
+body .onb-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  row-gap: var(--s-2);
+  min-height: 44px;
+  padding: var(--s-3) var(--s-2);
+  border-bottom: 1px solid var(--c-border-subtle);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+}
+body .mod-line:last-child,
+body .onb-line:last-child { border-bottom: 0; }
+body .mod-line .sp,
+body .onb-line .sp { flex: 1; }
+body .mod-line .muted,
+body .onb-line .muted {
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+/* An automod pattern is literal text - show it as code, not as prose. */
+body .mod-pat {
+  max-width: 55%;
+  padding: var(--s-1) var(--s-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xs);
+  background: var(--c-code-bg);
+  color: var(--c-text);
+  font-family: var(--t-mono);
+  font-size: var(--t-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* block vs flag. The injected CSS hardcodes two dark-mode hexes for these, so
+   they are restated here in tokens. A block is destructive, so it is solid;
+   a flag only asks a human to look, so it is a tint. Read against
+   c-text-inverse and c-text respectively, both clear AA in all three themes. */
+body .mod-kind {
+  flex: none;
+  padding: 1px var(--s-3);
+  border-radius: var(--r-xs);
+  background: var(--c-surface-3);
+  color: var(--c-text-2);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-black);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+body .mod-kind.block {
+  background: var(--c-danger);
+  color: var(--c-text-inverse);
+}
+body .mod-kind.flag {
+  background: var(--c-warn-quiet);
+  border: 1px solid color-mix(in srgb, var(--c-warn) 50%, transparent);
+  color: var(--c-text);
+}
+
+body .mod-quote {
+  margin: var(--s-3) 0 0;
+  padding: var(--s-1) var(--s-5);
+  border-left: 2px solid var(--c-border-strong);
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  line-height: var(--t-body);
+  overflow-wrap: anywhere;
+}
+
+body .mod-ctl {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  margin-top: var(--s-5);
+}
+body .mod-ctl > .muted {
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+}
+body .mod-ctl select {
+  width: auto;
+  min-width: 160px;
+  flex: 0 1 auto;
+}
+
+/* The slowmode / read-only strip above the composer. It is rendered into
+   #composerBar, which layout.css owns; only the strip itself is styled here. */
+body .mod-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+  padding: var(--s-3) var(--s-5);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  line-height: var(--t-snug);
+}
+body .mod-note b { color: var(--c-text); }
+body .mod-note.mod-lock {
+  border-color: color-mix(in srgb, var(--c-danger) 40%, transparent);
+  background: var(--c-danger-quiet);
+  color: var(--c-text);
+}
+
+/* ============================================================================
+   12. ONBOARDING GATES
+   ========================================================================= */
+body .onb-sec { margin-bottom: var(--s-9); }
+body .onb-sec:last-child { margin-bottom: 0; }
+body .onb-line .rolechip { margin-left: 0; }
+
+/* The rules a Space makes you agree to, shown in the un-dismissable gate. */
+body .onb-rules {
+  max-height: 46dvh;
+  padding: var(--s-6);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-size: var(--t-base);
+  line-height: var(--t-loose);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* "React to get a role" hint under a message. Sits in the message list, so it
+   stays quiet: a pill that reads as metadata, not as content. */
+body .onb-rr {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  padding: var(--s-1) var(--s-5);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-full);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  line-height: var(--t-snug);
+}
+body .onb-rr b {
+  color: var(--c-text);
+  font-weight: var(--t-semibold);
+}
+
+/* ============================================================================
+   13. PHONE
+   The panel goes full screen here (layout.css), so the job in this file is to
+   keep the dense surfaces usable with a thumb: real tap targets, one column
+   where two would crush, tab bars that scroll instead of wrapping, and nothing
+   that can push the page sideways.
+   ========================================================================= */
+@media (max-width: 860px) {
+  #panel #panelContent {
+    padding: var(--s-5) var(--s-5)
+             calc(var(--s-12) + env(safe-area-inset-bottom));
+  }
+
+  /* One column: two 44px checkbox rows side by side at 360px is unreadable. */
+  body .roles-grid { grid-template-columns: 1fr; }
+
+  body .roles-name { max-width: 60%; }
+
+  /* Give the table region most of the screen once the panel is the screen. */
+  body .admin-scroll { max-height: min(64dvh, 620px); }
+
+  /* Tabs keep their horizontal scroll and gain a little end padding so the
+     last tab is not flush against the edge mid-swipe. */
+  body .admin-tabs {
+    gap: var(--s-5);
+    padding-right: var(--s-5);
+    scroll-padding-inline: var(--s-5);
+  }
+
+  /* Full-width actions read better than three cramped pills. */
+  .pc-actions button { flex: 1 1 100%; }
+  .pc-actions button.danger { margin-left: 0; }
+
+  .invite-opts { padding: var(--s-5); }
+
+  body .mod-pat { max-width: 100%; }
+}
+
+/* ============================================================================
+   14. TOUCH
+   Nothing in these panels is revealed by hover - every action button is in the
+   DOM from the start - so the only work here is size and press feedback.
+   ========================================================================= */
+@media (hover: none) {
+  .member { min-height: 44px; }
+
+  .result { padding: var(--s-5); }
+
+  /* 44x44 minimum for every control in a dense admin row. */
+  body .admin-acts button,
+  body .roles-acts button,
+  body .mod-actions button,
+  body .mod-line button,
+  body .onb-line button,
+  body .admin-line button,
+  .inv-row button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Hover fills never arrive on touch, so press states carry the feedback. */
+  .result:active,
+  .member:active,
+  body .roles-row:active,
+  body .admin-line:active { background: var(--c-surface-2); }
+
+  .chooser-card:active { background: var(--c-surface-3); }
+}

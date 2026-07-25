@@ -13,7 +13,34 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Hearth" />
 <meta name="mobile-web-app-capable" content="yes" />
-<link rel="stylesheet" href="./styles.css" />
+
+<!-- Paint the stored theme before the first frame. Doing this from a module
+     would flash the default dark theme at every light-mode user on every load. -->
+<script>
+  (function () {
+    try {
+      var c = localStorage.getItem('hearth.theme') || 'system';
+      var r = c === 'system'
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : c;
+      document.documentElement.setAttribute('data-theme', r);
+      document.documentElement.setAttribute('data-theme-choice', c);
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+
+<!-- Load order is the cascade: tokens define the vocabulary, base resets the
+     document, then each surface layer. Nothing below tokens.css may hardcode a
+     colour or a spacing value. -->
+<link rel="stylesheet" href="./css/tokens.css" />
+<link rel="stylesheet" href="./css/base.css" />
+<link rel="stylesheet" href="./css/components.css" />
+<link rel="stylesheet" href="./css/layout.css" />
+<link rel="stylesheet" href="./css/messages.css" />
+<link rel="stylesheet" href="./css/panels.css" />
+<link rel="stylesheet" href="./css/features.css" />
 </head>
 <body>
 <div id="app">
@@ -29,8 +56,23 @@
 
       <div id="emailStep">
         <label class="field"><span class="field-label">Email</span>
-          <input id="email" type="email" placeholder="you@work.com" autocomplete="email" inputmode="email" /></label>
-        <button id="otpSend" class="wide">Email me a sign-in code</button>
+          <input id="email" type="email" placeholder="you@gmail.com" autocomplete="email" inputmode="email" /></label>
+        <label class="field"><span class="field-label">Password</span>
+          <input id="password" type="password" placeholder="Your password" autocomplete="current-password" /></label>
+        <button id="pwSignIn" class="wide">Sign in</button>
+        <button id="otpSend" class="ghost wide">Email me a sign-in code instead</button>
+      </div>
+
+      <!-- Provisioned accounts arrive with a temporary password and are made to
+           replace it before they can use the app. -->
+      <div id="setPwStep" class="hidden">
+        <p class="muted">Welcome<span id="pwWho"></span>. Choose a password before you continue - the temporary one stops working now.</p>
+        <label class="field"><span class="field-label">New password</span>
+          <input id="newPw" type="password" placeholder="At least 8 characters" autocomplete="new-password" /></label>
+        <label class="field"><span class="field-label">Confirm password</span>
+          <input id="newPw2" type="password" placeholder="Type it again" autocomplete="new-password" /></label>
+        <div id="pwMeter" class="pwmeter"><i></i></div>
+        <button id="pwSave" class="wide">Set password and continue</button>
       </div>
 
       <div id="otpStep" class="hidden">
@@ -65,6 +107,7 @@
       <button id="installBtn" class="install hidden" title="Install Hearth as an app">⬇ Install app</button>
       <button id="btnInvite" class="sm" title="Invite people to this Space">Invite</button>
       <div id="headerActions" class="hdr-actions"></div>
+      <button class="icon" id="btnTheme" title="Appearance" aria-label="Change appearance">◐</button>
       <button class="icon" id="btnMembersCount" title="Online"><span class="dot on"></span><span id="onlineCount">1</span></button>
       <span class="muted meName" id="meName"></span>
       <button class="ghost sm" id="signout">Sign out</button>

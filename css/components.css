@@ -1,0 +1,1191 @@
+/* ============================================================================
+   Components: the reusable control vocabulary. Buttons, form controls, modals,
+   toasts, menus, popovers, the emoji and theme pickers, the quick switcher, and
+   the small pieces (avatar, badge, dot, pill, chip) that every surface composes
+   from.
+
+   Two rules govern every colour below.
+
+   1. Content chrome only. Everything here lives in the content area, a modal, a
+      toast or a popover - never inside the rail or the left sidebar. So it uses
+      the content tokens (--c-bg, --c-surface*, --c-text*). The one exception
+      the shell creates is #btnSpaces, a .ghost button that sits inside the
+      sidebar; re-skinning that one for the aubergine belongs to layout.css.
+
+   2. Ink on a solid fill is --c-text-inverse, not --c-accent-text. In dark mode
+      the accent is a LIGHT blue, so white-on-accent measures 3.1:1 and fails
+      AA. --c-text-inverse is dark ink in the dark theme and white in the light
+      themes, which is exactly the direction that contrasts with a saturated
+      fill in each one. Tinted (quiet) fills use the same self-correcting trick
+      through color-mix: mixing a hue with --c-text darkens it on light themes
+      and lightens it on dark ones, so one declaration passes in all three.
+   ========================================================================= */
+
+/* ============================================================================
+   BUTTONS
+   ========================================================================= */
+
+/* The bare element is the primary action: a solid accent chip with a little
+   lift, so a form always has one obvious way forward. */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  min-height: 34px;
+  padding: var(--s-4) var(--s-6);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--c-accent);
+  color: var(--c-text-inverse);
+  font: inherit;
+  font-size: var(--t-base);
+  font-weight: var(--t-semibold);
+  line-height: var(--t-tight);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--e-1);
+  transition:
+    background var(--m-fast) var(--m-ease),
+    border-color var(--m-fast) var(--m-ease),
+    color var(--m-fast) var(--m-ease),
+    box-shadow var(--m-fast) var(--m-ease),
+    opacity var(--m-fast) var(--m-ease),
+    transform var(--m-fast) var(--m-ease);
+}
+
+button:hover { background: var(--c-accent-hover); }
+
+/* Pressed means pressed: it sinks by a hair and loses its shadow. */
+button:active { transform: translateY(1px); box-shadow: none; }
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+button:disabled:hover { background: var(--c-accent); }
+
+/* A filled button carries its own ink. Secondary text inside one has to be a
+   softened version of THAT ink - the content-area grey of .muted/.faint sits on
+   --c-bg and disappears entirely on an accent fill. Softening with opacity
+   rather than a mix keeps the hue exactly on the button's own ink. */
+button .muted,
+button .faint {
+  color: inherit;
+  opacity: 0.78;
+}
+
+/* ------------------------------------------------------------------ ghost
+   The secondary. Reads as a surface, not as a call to action. */
+button.ghost {
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  border-color: var(--c-border);
+  box-shadow: none;
+}
+button.ghost:hover {
+  background: var(--c-surface-3);
+  border-color: var(--c-border-strong);
+}
+button.ghost:active { background: var(--c-surface-3); }
+button.ghost:disabled:hover { background: var(--c-surface-2); }
+
+/* ------------------------------------------------------------------ danger */
+button.danger {
+  background: var(--c-danger);
+  color: var(--c-text-inverse);
+}
+button.danger:hover { background: color-mix(in srgb, var(--c-danger) 86%, var(--c-text)); }
+button.danger:disabled:hover { background: var(--c-danger); }
+
+/* ------------------------------------------------------------------ toggled
+   .on is the "this setting is live" state - mute, deafen, a filter chip.
+   The fill is the low-alpha --c-*-quiet token rather than a color-mix: an
+   alpha fill lets whatever surface it lands on show through, so the accent ink
+   keeps its contrast wherever the control is used. */
+button.on {
+  background: var(--c-accent-quiet);
+  border-color: color-mix(in srgb, var(--c-accent) 45%, transparent);
+  color: var(--c-accent);
+  box-shadow: none;
+}
+button.on:hover {
+  background: color-mix(in srgb, var(--c-accent) 16%, transparent);
+  border-color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------ sizes */
+button.sm {
+  min-height: 28px;
+  padding: var(--s-3) var(--s-5);
+  font-size: var(--t-sm);
+}
+button.wide {
+  width: 100%;
+  min-height: 40px;
+}
+
+/* ------------------------------------------------------------------ icon
+   A quiet square used in the header, the composer and the message hover bar.
+   Small and calm at rest; it only paints a surface once you are on it. */
+button.icon {
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: var(--t-md);
+  font-weight: var(--t-normal);
+  box-shadow: none;
+}
+button.icon:hover {
+  background: var(--c-surface-2);
+  color: var(--c-text);
+}
+button.icon:active {
+  background: var(--c-surface-3);
+  transform: none;
+}
+button.icon.on {
+  background: var(--c-accent-quiet);
+  color: var(--c-accent);
+}
+button.icon:disabled:hover { background: transparent; color: var(--c-text-2); }
+
+/* The send arrow carries the accent so the composer always shows its verb. */
+button.icon.send {
+  color: var(--c-accent);
+  font-size: var(--t-lg);
+}
+button.icon.send:hover {
+  background: var(--c-accent-quiet);
+  color: var(--c-accent-hover);
+}
+button.icon.send:disabled { color: var(--c-text-2); background: transparent; }
+
+/* ------------------------------------------------------------------ install
+   A tinted call to action rather than a solid green one: --c-success is too
+   light behind white text in every theme to reach AA. The green lives in the
+   fill and the edge; the label stays full-strength text so it always reads. */
+button.install {
+  background: var(--c-success-quiet);
+  border-color: color-mix(in srgb, var(--c-success) 42%, transparent);
+  color: var(--c-text);
+  box-shadow: none;
+}
+button.install:hover {
+  background: color-mix(in srgb, var(--c-success) 14%, transparent);
+  border-color: var(--c-success);
+}
+
+/* Touch: a 32px square is a miss on a phone. Grow the button and hang an
+   invisible 44px target off it so the row spacing does not have to change. */
+@media (hover: none) {
+  button.icon {
+    position: relative;
+    width: 40px;
+    height: 40px;
+  }
+  button.icon::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+  button { min-height: 40px; }
+  button.sm { min-height: 36px; }
+}
+
+/* ============================================================================
+   FORM CONTROLS
+   ========================================================================= */
+
+input,
+textarea,
+select {
+  width: 100%;
+  min-height: 38px;
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-md);
+  /* --c-bg rather than a surface: the field should read as a well cut into
+     whatever card it sits on, in every theme. */
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+  font-size: var(--t-base);
+  line-height: var(--t-snug);
+  transition:
+    background var(--m-fast) var(--m-ease),
+    border-color var(--m-fast) var(--m-ease),
+    box-shadow var(--m-fast) var(--m-ease);
+}
+
+textarea {
+  resize: vertical;
+  line-height: var(--t-body);
+}
+
+input:hover:not(:disabled),
+textarea:hover:not(:disabled),
+select:hover:not(:disabled) { border-color: var(--c-text-3); }
+
+/* :focus, not :focus-visible - a field you are typing into must always show
+   where the caret lives. The ring replaces the base.css outline because a
+   border plus a halo hugs the rounded corner better than an offset outline. */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 22%, transparent);
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible { outline: none; }
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--c-surface-2);
+}
+
+::placeholder {
+  /* Softened towards the field so it reads as a prompt, but still well clear
+     of --c-text-3, which does not reach AA on a light background. */
+  color: color-mix(in srgb, var(--c-text-2) 86%, var(--c-bg));
+  opacity: 1;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  flex: none;
+  padding: 0;
+  accent-color: var(--c-accent);
+  cursor: pointer;
+}
+
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (max-width: 860px) {
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+    font-size: var(--t-lg);
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 22px;
+    height: 22px;
+    min-height: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ field */
+.field {
+  display: block;
+  margin-bottom: var(--s-6);
+}
+.field-label {
+  display: block;
+  margin-bottom: var(--s-3);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  font-weight: var(--t-semibold);
+  line-height: var(--t-snug);
+}
+.field-hint {
+  display: block;
+  margin-top: var(--s-3);
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  line-height: var(--t-snug);
+}
+
+/* The markup is label-then-input; order puts the box first without asking the
+   JS to change, and lets the hint drop onto its own line. */
+.field-check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  min-height: 44px;
+  cursor: pointer;
+}
+.field-check input { order: 1; }
+.field-check .field-label {
+  order: 2;
+  margin: 0;
+  font-size: var(--t-base);
+  font-weight: var(--t-normal);
+}
+.field-check .field-hint {
+  order: 3;
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+.form .field { margin-bottom: 0; }
+.form > .muted { font-size: var(--t-sm); line-height: var(--t-body); }
+
+/* ------------------------------------------------------------------ codeinput
+   The one-time-code box. Monospaced so the digits sit on a grid. */
+.codeinput {
+  min-height: 56px;
+  padding: var(--s-5) var(--s-4);
+  font-family: var(--t-mono);
+  font-size: var(--t-2xl);
+  font-weight: var(--t-bold);
+  text-align: center;
+  letter-spacing: 0.34em;
+  /* letter-spacing also trails the last glyph; nudge back to optical centre. */
+  text-indent: 0.34em;
+}
+
+/* ============================================================================
+   MODAL
+   Centred card on a desktop, bottom sheet on a phone - the sheet is what a
+   phone user expects, and it puts the actions under the thumb.
+   ========================================================================= */
+
+.modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-6);
+  background: var(--c-scrim);
+  backdrop-filter: blur(6px) saturate(115%);
+  -webkit-backdrop-filter: blur(6px) saturate(115%);
+  animation: modal-fade var(--m-base) var(--m-ease);
+}
+
+.modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 460px;
+  max-height: min(86dvh, 720px);
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  background: var(--c-overlay);
+  box-shadow: var(--e-4);
+  animation: modal-rise var(--m-slow) var(--m-out);
+}
+.modal-wide { max-width: 660px; }
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex: none;
+  padding: var(--s-5) var(--s-5) var(--s-5) var(--s-7);
+  border-bottom: 1px solid var(--c-border);
+}
+.modal-head strong {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--t-lg);
+  font-weight: var(--t-semibold);
+  line-height: var(--t-snug);
+}
+.modal-head > .icon { flex: none; margin-left: auto; }
+
+/* A titleless modal (the quick switcher) should not carry an empty bar - the
+   close button floats over the top-right corner instead. */
+.modal-head strong:empty { display: none; }
+.modal-head:has(> strong:empty) {
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-3);
+  z-index: 1;
+  padding: 0;
+  border-bottom: none;
+}
+
+.modal-body {
+  padding: var(--s-7);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.modal-body > p { line-height: var(--t-body); }
+.modal-body > p + p { margin-top: var(--s-5); }
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--s-4);
+  flex: none;
+  padding: var(--s-5) var(--s-7);
+  border-top: 1px solid var(--c-border);
+  /* A touch of tint separates the actions from the body without a hard line. */
+  background: var(--c-surface);
+}
+
+@keyframes modal-fade {
+  from { opacity: 0; }
+}
+@keyframes modal-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.975); }
+}
+@keyframes sheet-up {
+  from { transform: translateY(16px); }
+}
+
+@media (max-width: 860px) {
+  .modal-back {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal,
+  .modal-wide {
+    max-width: 100%;
+    max-height: 92dvh;
+    border-width: 1px 0 0;
+    border-radius: var(--r-2xl) var(--r-2xl) 0 0;
+    animation: sheet-up var(--m-slow) var(--m-out);
+  }
+  /* Grab handle: the visual promise that this sheet came up from the bottom. */
+  .modal::before {
+    content: "";
+    position: absolute;
+    top: var(--s-3);
+    left: 50%;
+    z-index: 2;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    border-radius: var(--r-full);
+    background: var(--c-border-strong);
+  }
+  .modal-head { padding: var(--s-7) var(--s-5) var(--s-5) var(--s-6); }
+  .modal-body { padding: var(--s-6); }
+  .modal-body:last-child { padding-bottom: max(var(--s-6), env(safe-area-inset-bottom)); }
+  .modal-foot {
+    padding: var(--s-5) var(--s-6);
+    padding-bottom: max(var(--s-5), env(safe-area-inset-bottom));
+  }
+  /* Thumb-sized, side by side: cancel left, confirm right. */
+  .modal-foot > button { flex: 1; min-height: 46px; }
+}
+
+/* ============================================================================
+   TOASTS
+   ========================================================================= */
+
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: max(var(--s-7), calc(env(safe-area-inset-bottom) + var(--s-5)));
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  width: min(420px, calc(100vw - var(--s-8)));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  max-width: 100%;
+  padding: var(--s-5) var(--s-6);
+  border: 1px solid var(--c-border);
+  /* The kind is carried by a coloured edge, so the message itself always sits
+     on a neutral surface and always reads. */
+  border-left: 3px solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  background: var(--c-overlay);
+  color: var(--c-text);
+  font-size: var(--t-base);
+  line-height: var(--t-snug);
+  box-shadow: var(--e-3);
+  pointer-events: auto;
+  overflow-wrap: anywhere;
+  animation: toast-in var(--m-slow) var(--m-out);
+  transition:
+    opacity var(--m-slow) var(--m-ease),
+    transform var(--m-slow) var(--m-ease);
+}
+
+/* The tint rides as a background-image over the opaque --c-overlay base. A bare
+   translucent background-color would let the message list read through the
+   toast, and a flattened mix would drop the opaque base the text is judged
+   against. */
+.toast-info { border-left-color: var(--c-accent); }
+.toast-error {
+  border-color: color-mix(in srgb, var(--c-danger) 26%, var(--c-border));
+  border-left-color: var(--c-danger);
+  background-image: linear-gradient(var(--c-danger-quiet), var(--c-danger-quiet));
+}
+.toast-success {
+  border-color: color-mix(in srgb, var(--c-success) 26%, var(--c-border));
+  border-left-color: var(--c-success);
+  background-image: linear-gradient(var(--c-success-quiet), var(--c-success-quiet));
+}
+
+/* ui.js adds .out and removes the node 250ms later. */
+.toast.out {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+/* ============================================================================
+   POPOVERS AND CONTEXT MENUS
+   Both are measured with getBoundingClientRect() the instant they are appended,
+   so their entry animation may only translate - a scale would be measured and
+   would place them a few pixels off.
+   ========================================================================= */
+
+.popover,
+.ctxmenu {
+  position: fixed;
+  z-index: var(--z-popover);
+  max-width: calc(100vw - var(--s-8));
+  padding: var(--s-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-overlay);
+  box-shadow: var(--e-3);
+  animation: pop-in var(--m-base) var(--m-out);
+}
+
+.ctxmenu {
+  min-width: 200px;
+  max-width: min(300px, calc(100vw - var(--s-8)));
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-height: 34px;
+  padding: var(--s-3) var(--s-5);
+  border-radius: var(--r-sm);
+  color: var(--c-text);
+  font-size: var(--t-base);
+  line-height: var(--t-snug);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--m-fast) var(--m-ease),
+    color var(--m-fast) var(--m-ease);
+}
+/* Inside an overlay --c-hover is too close to --c-overlay to be seen; the next
+   surface up is the one that actually registers as a hover. */
+.ctx-item:hover { background: var(--c-surface-3); }
+.ctx-item:active { background: var(--c-selected); }
+.ctx-item.danger { color: var(--c-danger); }
+.ctx-item.danger:hover {
+  background: var(--c-danger-quiet);
+  color: var(--c-danger);
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: var(--s-2) var(--s-3);
+  background: var(--c-border);
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+@media (hover: none) {
+  .ctx-item { min-height: 44px; padding: var(--s-4) var(--s-5); }
+}
+
+/* ============================================================================
+   EMOJI PICKER
+   ========================================================================= */
+
+.popover-emoji {
+  width: min(348px, calc(100vw - var(--s-8)));
+  padding: var(--s-4);
+}
+
+.emoji-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.emoji-search {
+  min-height: 34px;
+  padding: var(--s-3) var(--s-5);
+  border-radius: var(--r-sm);
+  font-size: var(--t-base);
+}
+
+.emoji-tabs {
+  display: flex;
+  gap: var(--s-1);
+  padding-bottom: var(--s-1);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.emoji-tabs::-webkit-scrollbar { display: none; }
+
+.emoji-tab {
+  flex: none;
+  min-height: 26px;
+  padding: var(--s-2) var(--s-4);
+  border: none;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  font-weight: var(--t-semibold);
+  box-shadow: none;
+}
+.emoji-tab:hover { background: var(--c-surface-2); color: var(--c-text); }
+.emoji-tab.active { background: var(--c-selected); color: var(--c-text); }
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: var(--s-1);
+  max-height: 236px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.emoji-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-text);
+  font-family: var(--t-emoji);
+  font-size: var(--t-xl);
+  font-weight: var(--t-normal);
+  line-height: 1;
+  box-shadow: none;
+}
+.emoji-cell:hover {
+  background: var(--c-surface-3);
+  transform: scale(1.14);
+}
+.emoji-cell:active { transform: scale(0.94); }
+.emoji-cell img { width: 22px; height: 22px; object-fit: contain; }
+
+@media (max-width: 860px) {
+  /* Seven across on a phone gives every cell a comfortable 44px. */
+  .emoji-grid {
+    grid-template-columns: repeat(7, 1fr);
+    max-height: 42dvh;
+  }
+  .emoji-tab {
+    min-height: 34px;
+    padding: var(--s-2) var(--s-5);
+    font-size: var(--t-sm);
+  }
+}
+
+/* ============================================================================
+   THEME PICKER
+   ========================================================================= */
+
+.popover-theme {
+  width: min(320px, calc(100vw - var(--s-8)));
+  padding: var(--s-2);
+}
+
+.theme-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--s-4);
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--c-text);
+  font-weight: var(--t-normal);
+  text-align: left;
+  white-space: normal;
+  box-shadow: none;
+}
+.theme-option:hover { background: var(--c-surface-2); }
+.theme-option:active { background: var(--c-surface-3); transform: none; }
+.theme-option.is-active { background: var(--c-selected); }
+
+/* A miniature of the app: a sidebar band, the conversation area, and the accent
+   sitting in it like a message. theme.js supplies the three fills inline. */
+.theme-swatch {
+  position: relative;
+  display: flex;
+  flex: none;
+  width: 46px;
+  height: 32px;
+  overflow: hidden;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-sm);
+}
+.theme-swatch i { display: block; height: 100%; }
+.theme-swatch i:nth-child(1) { width: 36%; }
+.theme-swatch i:nth-child(2) { flex: 1; }
+.theme-swatch i:nth-child(3) {
+  position: absolute;
+  right: 5px;
+  bottom: 6px;
+  width: 17px;
+  height: 5px;
+  border-radius: var(--r-full);
+}
+
+.theme-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  flex: 1;
+  min-width: 0;
+}
+.theme-name {
+  color: var(--c-text);
+  font-size: var(--t-base);
+  font-weight: var(--t-semibold);
+  line-height: var(--t-tight);
+}
+.theme-hint {
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  font-weight: var(--t-normal);
+  line-height: var(--t-snug);
+}
+
+.theme-check {
+  flex: none;
+  width: 18px;
+  color: var(--c-accent);
+  font-size: var(--t-md);
+  font-weight: var(--t-bold);
+  text-align: center;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--m-base) var(--m-out),
+    transform var(--m-base) var(--m-spring);
+}
+.theme-option.is-active .theme-check { opacity: 1; transform: none; }
+
+@media (hover: none) {
+  .theme-option { min-height: 56px; }
+}
+
+/* ============================================================================
+   PICKERS AND THE QUICK SWITCHER
+   ========================================================================= */
+
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.picker-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(52dvh, 360px);
+  /* Bleed the hover surface past the body padding so rows feel full width. */
+  margin: 0 calc(-1 * var(--s-3));
+  padding: 0 var(--s-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-height: 44px;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  color: var(--c-text);
+  font-size: var(--t-base);
+  cursor: pointer;
+  transition: background var(--m-fast) var(--m-ease);
+}
+.picker-row:hover { background: var(--c-surface-3); }
+.picker-row:active { background: var(--c-selected); }
+.picker-row > span:not([class]) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ switcher
+   Ctrl+K. A command palette: one big field, roomy rows, an unmistakable
+   selection. It is the most used power feature in the app. */
+.switcher {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.modal-body:has(> .switcher) { padding: 0; }
+
+.switcher input {
+  min-height: 60px;
+  padding: var(--s-5) var(--s-12) var(--s-5) var(--s-7);
+  border: none;
+  border-bottom: 1px solid var(--c-border);
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--t-xl);
+  font-weight: var(--t-medium);
+}
+.switcher input:focus {
+  border-color: var(--c-border);
+  box-shadow: none;
+}
+
+#qsRows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(56dvh, 420px);
+  padding: var(--s-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#qsRows:empty { display: none; }
+
+.qs-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  min-height: 44px;
+  padding: var(--s-3) var(--s-5);
+  border-radius: var(--r-md);
+  color: var(--c-text);
+  font-size: var(--t-md);
+  cursor: pointer;
+  transition: background var(--m-fast) var(--m-ease);
+}
+.qs-row:hover { background: var(--c-surface-3); }
+.qs-row.sel {
+  background: var(--c-selected);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+.qs-ico {
+  flex: none;
+  width: 20px;
+  color: var(--c-text-2);
+  font-size: var(--t-md);
+  text-align: center;
+}
+.qs-row > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qs-row .muted {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--s-4);
+  font-size: var(--t-sm);
+}
+
+@media (max-width: 860px) {
+  .switcher input {
+    min-height: 56px;
+    padding: var(--s-5) var(--s-11) var(--s-5) var(--s-6);
+  }
+  .qs-row { min-height: 48px; }
+  .qs-row .muted { display: none; }
+}
+
+/* ============================================================================
+   SMALL PIECES
+   ========================================================================= */
+
+/* ------------------------------------------------------------------ avatar
+   messages.js sets width, height and an hsl() fill inline - never override the
+   background here. The fill is always dark, so the initials are always white:
+   --c-accent-text is the only token that is white in all three themes. */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  color: var(--c-accent-text);
+  font-size: var(--t-sm);
+  font-weight: var(--t-bold);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity var(--m-fast) var(--m-ease);
+}
+.avatar:hover { opacity: 0.82; }
+
+/* The inline size is the only signal we have for scaling the initials, and
+   avatarHtml() emits a fixed set of sizes, so match on those. */
+.avatar[style*="width:16px"],
+.avatar[style*="width:18px"] { font-size: var(--t-2xs); }
+.avatar[style*="width:20px"],
+.avatar[style*="width:26px"],
+.avatar[style*="width:28px"] { font-size: var(--t-xs); }
+.avatar[style*="width:56px"] { font-size: var(--t-xl); }
+
+/* ------------------------------------------------------------------ badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-full);
+  background: var(--c-danger);
+  color: var(--c-text-inverse);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-black);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ------------------------------------------------------------------ presence */
+.dot {
+  display: inline-block;
+  flex: none;
+  width: var(--s-4);
+  height: var(--s-4);
+  border-radius: var(--r-full);
+  background: var(--c-text-3);
+}
+.dot.on {
+  background: var(--c-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-success) 24%, transparent);
+}
+.dot.off {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--c-text-3);
+}
+
+/* ------------------------------------------------------------------ pill
+   The tiny uppercase labels on a message: APP, URGENT, a topic. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--s-3);
+  border-radius: var(--r-xs);
+  background: var(--c-surface-3);
+  color: var(--c-text-2);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-bold);
+  letter-spacing: 0.05em;
+  line-height: 1.55;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+/* Tinted, not filled: solid --c-accent / --c-danger behind white at 10.5px does
+   not reach AA in the dark theme, and a tint keeps the message row calm. */
+.pill-bot {
+  background: var(--c-accent-quiet);
+  color: var(--c-accent);
+}
+.pill-urgent {
+  background: var(--c-danger-quiet);
+  color: var(--c-danger);
+}
+.pill-topic {
+  padding: 1px var(--s-4);
+  border-radius: var(--r-full);
+  font-size: var(--t-xs);
+  font-weight: var(--t-semibold);
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+  transition:
+    background var(--m-fast) var(--m-ease),
+    color var(--m-fast) var(--m-ease);
+}
+.pill-topic:hover {
+  background: var(--c-accent-quiet);
+  color: var(--c-accent);
+}
+
+/* ------------------------------------------------------------------ rolechip */
+.rolechip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--s-2);
+  padding: 1px var(--s-4);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-full);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  font-weight: var(--t-medium);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ chip
+   Pending attachments in the composer, and the generic filter chip. */
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  max-width: 100%;
+  min-height: 32px;
+  padding: var(--s-3) var(--s-4);
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  font-weight: var(--t-normal);
+  line-height: var(--t-tight);
+  box-shadow: none;
+  transition:
+    background var(--m-fast) var(--m-ease),
+    border-color var(--m-fast) var(--m-ease),
+    color var(--m-fast) var(--m-ease);
+}
+.chip-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip .muted { font-size: var(--t-xs); }
+.chip .x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-right: calc(-1 * var(--s-2));
+  border-radius: var(--r-full);
+  color: var(--c-text-2);
+  cursor: pointer;
+  transition:
+    background var(--m-fast) var(--m-ease),
+    color var(--m-fast) var(--m-ease);
+}
+.chip .x:hover { background: var(--c-surface-3); color: var(--c-text); }
+.chip.up { color: var(--c-text-2); }
+.chip.failed {
+  border-color: var(--c-danger);
+  background: var(--c-danger-quiet);
+  color: var(--c-danger);
+}
+/* Upload progress, drawn as a rule along the bottom edge of the chip. */
+.chip-prog {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--c-accent);
+  transition: width var(--m-slow) var(--m-ease);
+}
+
+/* A chip used as a filter button carries the toggle state instead. */
+button.chip.on {
+  border-color: var(--c-accent);
+  background: var(--c-accent-quiet);
+  color: var(--c-accent);
+}
+
+@media (hover: none) {
+  .chip { min-height: 40px; }
+  .chip .x { position: relative; }
+  /* Keep the glyph small but make the target real. */
+  .chip .x::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ------------------------------------------------------------------ tabs
+   Generic segmented control: a track with one raised, selected segment. */
+.tabs {
+  display: inline-flex;
+  gap: var(--s-1);
+  padding: var(--s-1);
+  border-radius: var(--r-md);
+  background: var(--c-surface-2);
+}
+.tabs > button {
+  min-height: 30px;
+  padding: var(--s-3) var(--s-5);
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: var(--t-sm);
+  font-weight: var(--t-semibold);
+  box-shadow: none;
+}
+.tabs > button:hover { background: var(--c-surface-3); color: var(--c-text); }
+.tabs > button.on {
+  border-color: transparent;
+  background: var(--c-bg);
+  color: var(--c-text);
+  box-shadow: var(--e-1);
+}
+@media (hover: none) {
+  .tabs > button { min-height: 40px; }
+}

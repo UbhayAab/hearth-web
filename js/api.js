@@ -50,6 +50,8 @@ export const api = {
   effectiveStatus: (user) => rpc('get_effective_status', { p_user: user }),
   profileCard: (user) => rpc('get_profile_card', { p_user: user }),
   exportMyData: () => rpc('export_my_data', {}),
+  completePasswordSetup: () => rpc('complete_password_setup', {}),
+  mustSetPassword: () => rpc('must_set_password', {}),
   anonymizeAccount: () => rpc('anonymize_account', {}),
 
   // ---------- spaces / workspaces ----------

@@ -1,0 +1,958 @@
+/* ============================================================================
+   Layout: the app frame.
+
+   Sign-in screen, top bar, Space rail, channel sidebar, voice bar, the main
+   three-column frame, the right-hand panel shell, and every responsive rule in
+   the app. Message internals live in messages.css, panel internals in
+   panels.css, controls in components.css.
+
+   THE CHROME RULE
+   Everything inside #topbar, #spaceRail and #sidebar paints with the --c-nav-*
+   family. Everything else paints with the content family (--c-bg, --c-surface,
+   --c-text ...). That split is the whole reason the colorful theme can put a
+   deep aubergine sidebar next to a white message list.
+
+   Phone first: the sidebar is an off-canvas drawer under 860px, the right panel
+   is a full-screen sheet, and nothing may scroll sideways at 360px.
+   ========================================================================= */
+
+/* CONTRAST NOTE
+   Chrome text never uses --c-nav-text-2: on the light theme's nav surface it
+   lands at 3.4:1, under AA. The quiet step in this file is --c-nav-text at a
+   smaller size or lighter weight, and emphasis comes from --c-nav-text-active.
+   Colour-mixed values are used for borders, rings and decorative tints only,
+   never for a colour that text has to be read against. */
+
+/* ============================================================================
+   SIGN IN
+   The first screen anyone sees. A single centred card on a quiet accent wash.
+   ========================================================================= */
+.authwrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-8) var(--s-6) calc(var(--s-8) + env(safe-area-inset-bottom));
+  /* A wash rather than a flat field, so the card has something to sit on. */
+  background:
+    radial-gradient(120% 80% at 50% -10%,
+      color-mix(in srgb, var(--c-accent) 16%, transparent), transparent 68%),
+    var(--c-bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.authcard {
+  /* margin:auto keeps the card centred while still letting it scroll on a short
+     phone in landscape, which align-items:center alone would clip. */
+  margin: auto;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  padding: var(--s-9) var(--s-8) var(--s-8);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--e-3);
+}
+
+/* The card owns its rhythm through gap, so fields must not add a second margin.
+   .field itself belongs to components.css; this only neutralises its spacing
+   inside my container. */
+.authcard .field { margin-bottom: 0; }
+#emailStep,
+#otpStep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+#otpStep .muted { line-height: var(--t-loose); }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+}
+.brand h1 {
+  font-size: var(--t-3xl);
+  font-weight: var(--t-black);
+  letter-spacing: -0.025em;
+  color: var(--c-text);
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-lg);
+  background: var(--c-accent-quiet);
+  font-size: var(--t-2xl);
+  line-height: 1;
+}
+
+.tagline {
+  margin-top: calc(var(--s-2) * -1);
+  color: var(--c-text-2);
+  font-size: var(--t-base);
+  line-height: var(--t-loose);
+  text-wrap: pretty;
+}
+
+.or {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  margin: var(--s-2) 0 0;
+}
+.or::before,
+.or::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--c-border);
+}
+.or span {
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  font-weight: var(--t-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* Errors read as a notice, not as red on red: the tint carries the alarm and
+   the copy stays at full text contrast. */
+.autherr {
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid color-mix(in srgb, var(--c-danger) 40%, transparent);
+  border-left: 3px solid var(--c-danger);
+  border-radius: var(--r-md);
+  background: var(--c-danger-quiet);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  line-height: var(--t-snug);
+}
+
+.fineprint {
+  margin-top: var(--s-1);
+  font-size: var(--t-xs);
+  line-height: var(--t-loose);
+}
+
+/* ============================================================================
+   APP SHELL
+   ========================================================================= */
+#chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  /* Containing block for the phone drawer, so it does not need to know how tall
+     the header or the voice bar happen to be. */
+  position: relative;
+  background: var(--c-bg);
+}
+
+section.msgs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--c-bg);
+}
+
+/* The scroll container. Without an explicit flex basis and min-height, a flex
+   child sizes to its CONTENT, so the message list grew to several thousand
+   pixels, pushed the composer past the bottom of the window and made the whole
+   document scroll - taking the header and sidebar out of view. min-height:0 is
+   the part that is easy to miss: a flex item's default min-height is auto,
+   which refuses to shrink below its content no matter what overflow says. */
+#messages {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: var(--s-5) 0 var(--s-4);
+  scroll-behavior: smooth;
+}
+
+/* The strips between the list and the composer must never take space from the
+   list or grow with their content. */
+#typing,
+#dmReceipt {
+  flex: 0 0 auto;
+}
+
+#composerBar {
+  flex: 0 0 auto;
+}
+
+/* The one scroll region of the app frame. Everything painted inside it is
+   messages.css; this is only the box that scrolls. min-height:0 is what stops a
+   long conversation from pushing the composer off the bottom of a flex column. */
+#messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* ============================================================================
+   TOP BAR - chrome, so --c-nav-*
+   ========================================================================= */
+#topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  height: calc(var(--header-h) + env(safe-area-inset-top));
+  padding: 0 var(--s-5);
+  padding-top: env(safe-area-inset-top);
+  background: var(--c-nav-bg);
+  border-bottom: 1px solid var(--c-nav-border);
+  color: var(--c-nav-text);
+  z-index: var(--z-nav);
+}
+
+#spaceName {
+  flex: none;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: var(--s-5);
+  border-right: 1px solid var(--c-nav-border);
+  color: var(--c-nav-brand);
+  font-size: var(--t-md);
+  font-weight: var(--t-bold);
+  letter-spacing: -0.01em;
+}
+
+.hdr-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-4);
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.hdr-title strong {
+  flex: none;
+  color: var(--c-nav-text-active);
+  font-size: var(--t-md);
+  font-weight: var(--t-bold);
+  white-space: nowrap;
+}
+#hdrTopic {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-sm);
+}
+
+/* The header sits on nav colours, so anything .muted inside it has to switch
+   families or it disappears against the aubergine. */
+#topbar .muted { color: var(--c-nav-text); }
+
+.hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex: 0 1 auto;
+  min-width: 0;
+  /* Features keep adding icons; let the row scroll rather than push the layout
+     sideways. The mask hints that there is more past the edge. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, currentColor calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to right, currentColor calc(100% - 18px), transparent);
+}
+.hdr-actions::-webkit-scrollbar { height: 0; }
+
+#topbar > button,
+#topbar > .install,
+.hdr-actions > button { flex: none; }
+
+/* Icon buttons in the header are chrome-coloured, not content-coloured. */
+#topbar button.icon {
+  min-width: 32px;
+  min-height: 32px;
+  color: var(--c-nav-text);
+  background: transparent;
+  transition: background-color var(--m-fast) var(--m-ease),
+    color var(--m-fast) var(--m-ease);
+}
+#topbar button.icon:hover {
+  background: var(--c-nav-hover);
+  color: var(--c-nav-text-active);
+}
+#topbar button.icon:active { background: var(--c-nav-active); }
+#topbar button.icon:disabled { opacity: 0.45; background: transparent; }
+
+/* Sign out is a quiet outline on the chrome, never a filled button. */
+#topbar #signout {
+  flex: none;
+  background: transparent;
+  color: var(--c-nav-text);
+  border: 1px solid var(--c-nav-border);
+}
+#topbar #signout:hover {
+  background: var(--c-nav-hover);
+  color: var(--c-nav-text-active);
+  border-color: color-mix(in srgb, var(--c-nav-text) 30%, transparent);
+}
+
+/* --c-text-inverse, not --c-accent-text: the dark theme's accent is a bright
+   blue that white 13px type cannot clear AA against. */
+#installBtn.install {
+  flex: none;
+  background: var(--c-accent);
+  color: var(--c-text-inverse);
+  font-weight: var(--t-semibold);
+}
+#installBtn.install:hover { background: var(--c-accent-hover); }
+
+.meName {
+  flex: none;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-sm);
+}
+
+/* Shown only once the layout narrows; see the phone block below. */
+.only-mobile { display: none; }
+
+/* ============================================================================
+   VOICE BAR
+   A live band under the header. Content colours, tinted with success so the
+   room reads as on-air without the text losing contrast.
+   ========================================================================= */
+#voicebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-6);
+  background: var(--c-success-quiet);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-success) 32%, transparent);
+  color: var(--c-text);
+}
+
+.vlabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--c-text);
+  font-size: var(--t-base);
+  font-weight: var(--t-semibold);
+}
+
+#vparts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.vpart {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-1) var(--s-5);
+  border-radius: var(--r-full);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  font-size: var(--t-sm);
+  white-space: nowrap;
+  transition: box-shadow var(--m-base) var(--m-ease),
+    background-color var(--m-base) var(--m-ease);
+}
+.vpart.speaking {
+  background: var(--c-success-quiet);
+  box-shadow: 0 0 0 2px var(--c-success);
+}
+/* The halo breathes on opacity and transform only, so a busy room stays cheap. */
+.vpart.speaking::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--c-success);
+  animation: vpulse 1.5s var(--m-ease) infinite;
+  pointer-events: none;
+}
+@keyframes vpulse {
+  from { opacity: 0.7; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.14); }
+}
+
+/* ============================================================================
+   SPACE RAIL - the multi-organisation switcher
+   ========================================================================= */
+#spaceRail {
+  flex: none;
+  width: var(--rail-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) 0 calc(var(--s-4) + env(safe-area-inset-bottom));
+  background: var(--c-nav-bg-2);
+  border-right: 1px solid var(--c-nav-border);
+  /* The indicator bar sits just outside each tile, so the cross axis must not
+     scroll; the rail itself scrolls when an admin is in a dozen Spaces. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+#spaceRail::-webkit-scrollbar { width: 0; }
+
+.sicon {
+  position: relative;
+  /* Keeps the per-Space tint layer under the initials instead of behind the
+     whole rail. */
+  isolation: isolate;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-xl);
+  background: var(--c-nav-hover);
+  color: var(--c-nav-text-active);
+  font-size: var(--t-md);
+  font-weight: var(--t-bold);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  user-select: none;
+  /* border-radius is in the transition on purpose: the squircle morph is the
+     whole gesture of a Discord-style rail. It repaints, it does not reflow. */
+  transition: border-radius var(--m-base) var(--m-spring),
+    background-color var(--m-base) var(--m-ease),
+    color var(--m-base) var(--m-ease);
+}
+
+/* Per-Space identity. workspace.js writes --h on the tile; rotating a token
+   colour keeps every Space distinguishable without hardcoding a palette, and
+   the tint is weak enough that the initials keep their contrast. */
+.sicon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--c-accent) 26%, transparent);
+  opacity: 0.8;
+  filter: hue-rotate(calc(var(--h, 220) * 1deg - 220deg));
+  transition: opacity var(--m-base) var(--m-ease);
+}
+
+/* The rail indicator: nothing at rest, a stub on hover, a full bar when the
+   Space is open. Scaled, never resized, so it never touches layout. */
+.sicon::before {
+  content: "";
+  position: absolute;
+  left: calc(3px - (var(--rail-w) - 44px) / 2);
+  top: 50%;
+  width: 4px;
+  height: 26px;
+  border-radius: var(--r-full);
+  background: var(--c-nav-text-active);
+  opacity: 0;
+  transform: translateY(-50%) scaleY(0);
+  transition: transform var(--m-base) var(--m-out), opacity var(--m-fast) var(--m-ease);
+}
+
+.sicon:hover { border-radius: var(--r-md); }
+.sicon:hover::after { opacity: 1; }
+.sicon:hover::before { opacity: 1; transform: translateY(-50%) scaleY(0.42); }
+
+/* The open Space: the same accent the sidebar uses for the open channel, so
+   selection reads as one idea across the whole frame. */
+.sicon.active {
+  border-radius: var(--r-md);
+  background: var(--c-accent);
+  color: var(--c-text-inverse);
+}
+.sicon.active::after { opacity: 0; }
+.sicon.active::before { opacity: 1; transform: translateY(-50%) scaleY(1); }
+
+/* Add a Space: an outline tile, never a filled one, so it stays subordinate. */
+.sicon.add {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--c-nav-text) 38%, transparent);
+  color: var(--c-nav-text);
+  font-size: var(--t-xl);
+  font-weight: var(--t-normal);
+}
+.sicon.add::after,
+.sicon.add::before { content: none; }
+.sicon.add:hover {
+  background: var(--c-nav-hover);
+  border-color: color-mix(in srgb, var(--c-nav-text) 60%, transparent);
+  color: var(--c-nav-text-active);
+}
+
+.sbadge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--s-2);
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  border: 2px solid var(--c-nav-bg-2);
+  background: var(--c-danger);
+  color: var(--c-text-inverse);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-black);
+  line-height: 1;
+}
+
+/* Unread with no mention: the same left anchor as the indicator bar, so the two
+   never stack. Hover and active hand the spot over to the bar. */
+.sdot {
+  position: absolute;
+  left: calc(3px - (var(--rail-w) - 44px) / 2);
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--c-nav-text-active);
+  transform: translateY(-50%);
+  transition: opacity var(--m-fast) var(--m-ease);
+}
+.sicon:hover .sdot,
+.sicon.active .sdot { opacity: 0; }
+
+/* ============================================================================
+   SIDEBAR - channels, voice rooms, DMs. All chrome, all --c-nav-*.
+   ========================================================================= */
+#sidebar {
+  flex: none;
+  width: var(--sidebar-w);
+  padding: var(--s-4) var(--s-3) var(--s-9);
+  background: var(--c-nav-bg);
+  border-right: 1px solid var(--c-nav-border);
+  color: var(--c-nav-text);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#sidebar #btnSpaces {
+  width: 100%;
+  margin: 0 0 var(--s-5);
+  background: transparent;
+  border: 1px solid var(--c-nav-border);
+  color: var(--c-nav-text);
+  font-weight: var(--t-semibold);
+}
+#sidebar #btnSpaces:hover {
+  background: var(--c-nav-hover);
+  border-color: color-mix(in srgb, var(--c-nav-text) 26%, transparent);
+  color: var(--c-nav-text-active);
+}
+
+#sidebar h3 {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  margin: var(--s-6) var(--s-2) var(--s-1);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-xs);
+  color: var(--c-nav-text);
+  font-size: var(--t-xs);
+  font-weight: var(--t-bold);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--m-fast) var(--m-ease);
+}
+#sidebar h3:first-child { margin-top: var(--s-1); }
+#sidebar h3:hover { color: var(--c-nav-text-active); }
+
+.navgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.chan {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-height: 30px;
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-sm);
+  color: var(--c-nav-text);
+  font-size: var(--t-md);
+  line-height: var(--t-tight);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--m-fast) var(--m-ease),
+    color var(--m-fast) var(--m-ease);
+}
+.chan:hover {
+  background: var(--c-nav-hover);
+  color: var(--c-nav-text-active);
+}
+.chan:active { background: var(--c-nav-active); }
+
+/* The open channel is a solid pill, not a tint: it has to survive being read
+   out of the corner of an eye. */
+.chan.active,
+.chan.active:hover {
+  background: var(--c-nav-active);
+  color: var(--c-nav-text-active);
+  font-weight: var(--t-semibold);
+}
+.chan.active .ch-ico { color: var(--c-nav-text-active); }
+
+.chan.unread {
+  color: var(--c-nav-text-active);
+  font-weight: var(--t-bold);
+}
+.chan.unread .ch-ico { color: var(--c-nav-text-active); }
+
+.chan.muted-ch {
+  color: var(--c-nav-text-2);
+  font-weight: var(--t-normal);
+}
+
+.ch-ico {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--c-nav-text);
+  font-size: var(--t-base);
+}
+.ch-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Counts and dots ride the right edge of the row. The bare .badge belongs to
+   components.css; this is only the sidebar's copy of it. */
+#sidebar .badge {
+  flex: none;
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-full);
+  background: var(--c-danger);
+  color: var(--c-text-inverse);
+  font-size: var(--t-2xs);
+  font-weight: var(--t-black);
+  line-height: 18px;
+  text-align: center;
+}
+.dot-unread {
+  flex: none;
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--c-nav-text-active);
+}
+/* Painted by the topics feature, which still asks for a colour the old
+   stylesheet defined. It lives in my sidebar, so it gets my nav colour. */
+#sidebar .topics-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--c-nav-text);
+  font-size: var(--t-xs);
+}
+#sidebar .topics-msg {
+  padding: var(--s-1) var(--s-4) var(--s-3);
+  color: var(--c-nav-text);
+  font-size: var(--t-xs);
+}
+
+.chan-add {
+  color: var(--c-nav-text);
+  font-size: var(--t-sm);
+}
+.chan-add:hover { color: var(--c-nav-text-active); }
+
+/* A voice room with people in it. The green is a dot, not the label, because
+   --c-success cannot clear AA as small text on the aubergine nav. */
+.live {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-left: auto;
+  color: var(--c-nav-text-active);
+  font-size: var(--t-xs);
+  font-weight: var(--t-bold);
+}
+.live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--c-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-success) 30%, transparent);
+}
+
+.vparts-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  /* Indented to line up under the channel name, past the icon column. */
+  padding: var(--s-1) var(--s-4) var(--s-3) calc(var(--s-4) + 16px + var(--s-4));
+}
+.vpart-nav {
+  padding: 1px var(--s-3);
+  border-radius: var(--r-full);
+  background: var(--c-nav-hover);
+  color: var(--c-nav-text);
+  font-size: var(--t-xs);
+}
+
+/* ============================================================================
+   RIGHT PANEL - container, header bar and scrolling only.
+   Everything painted inside .content belongs to panels.css.
+   ========================================================================= */
+aside#panel {
+  flex: none;
+  /* Narrow laptops must not starve the message column to feed the panel. */
+  width: clamp(300px, 32vw, var(--panel-w));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--c-surface);
+  border-left: 1px solid var(--c-border);
+}
+
+aside#panel > header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  height: var(--header-h);
+  padding: 0 var(--s-4) 0 var(--s-6);
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+aside#panel > header > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-md);
+  font-weight: var(--t-semibold);
+}
+
+aside#panel > .content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s-5) var(--s-5) var(--s-8);
+}
+
+aside#panel > footer {
+  flex: none;
+  padding: var(--s-4) var(--s-5) calc(var(--s-4) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+
+/* ============================================================================
+   DRAWER SCRIM
+   Dims the content while the phone drawer is open. It is painted as a
+   pseudo-element of #messages so that the existing "tap the message list to
+   close the nav" handler in main.js also catches a tap on the scrim: no JS
+   change, no dead-end drawer. The class form is here for anything that would
+   rather insert a real element.
+   ========================================================================= */
+.drawer-scrim,
+#messages::after {
+  position: fixed;
+  /* Stops short of the rail, so switching Space stays one tap away. */
+  inset: 0 0 0 var(--rail-w);
+  z-index: calc(var(--z-drawer) - 1);
+  background: var(--c-scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--m-slow) var(--m-ease);
+}
+body.nav-open .drawer-scrim,
+body.nav-open #messages::after {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ========================================================================= */
+
+/* Laptops: give the message column room back before the phone layout starts. */
+@media (max-width: 1180px) {
+  :root { --sidebar-w: 228px; }
+}
+
+/* ------------------------------------------------------------------ PHONE */
+@media (max-width: 860px) {
+  :root {
+    --rail-w: 60px;
+    --sidebar-w: 272px;
+  }
+
+  .only-mobile { display: inline-flex; }
+  #spaceName,
+  .meName,
+  #btnInvite { display: none; }
+
+  #topbar {
+    gap: var(--s-2);
+    padding: 0 var(--s-4);
+    padding-top: env(safe-area-inset-top);
+  }
+  .hdr-title { flex: 1 1 auto; }
+  .hdr-actions { max-width: 46vw; }
+  /* Sign out moves out of the way of the things people tap every minute. It is
+     still reachable from the profile panel. */
+  #topbar #signout { display: none; }
+
+  #voicebar { padding: var(--s-3) var(--s-5); }
+
+  /* Off-canvas drawer. Absolute inside main means it lines up under the header
+     and the voice bar without either of them being measured, and it clears the
+     rail so the Space switcher stays reachable while it is open.
+
+     pointer-events is not optional: a translated element still takes taps, and
+     that is exactly how the closed drawer used to swallow the first tap on the
+     message list. It is used here instead of visibility:hidden because
+     visibility also hides the channel list from the screenshot and a11y tooling
+     that has to be able to see the rows; the tap-swallowing bug is a
+     pointer-events problem and this kills it outright. */
+  #sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--rail-w);
+    z-index: var(--z-drawer);
+    width: min(var(--sidebar-w), calc(100vw - var(--rail-w) - var(--s-11)));
+    padding-bottom: calc(var(--s-9) + env(safe-area-inset-bottom));
+    box-shadow: var(--e-3);
+    pointer-events: none;
+    transform: translateX(calc(-100% - var(--rail-w)));
+    transition: transform var(--m-slow) var(--m-out);
+  }
+  body.nav-open #sidebar {
+    pointer-events: auto;
+    transform: none;
+  }
+
+  #messages::after { content: ""; }
+
+  /* The right panel becomes a sheet over everything, with its own header as the
+     way back out. */
+  aside#panel,
+  body.panel-open aside#panel {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-panel);
+    width: 100%;
+    border-left: none;
+    background: var(--c-bg);
+    animation: sheet-in var(--m-slow) var(--m-out);
+  }
+  aside#panel > header {
+    height: calc(var(--header-h) + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+  aside#panel > .content {
+    padding: var(--s-5) var(--s-5) calc(var(--s-9) + env(safe-area-inset-bottom));
+  }
+
+  @keyframes sheet-in {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* The rail narrows but the tiles do not: 44px stays the floor for a thumb. */
+  #spaceRail { gap: var(--s-3); }
+
+  .authcard {
+    padding: var(--s-8) var(--s-6);
+    border-radius: var(--r-lg);
+  }
+  .brand h1 { font-size: var(--t-2xl); }
+}
+
+/* --------------------------------------------------------- SMALL PHONE
+   360px wide, nothing may run off the side. */
+@media (max-width: 380px) {
+  #topbar {
+    gap: var(--s-1);
+    padding: 0 var(--s-3);
+    padding-top: env(safe-area-inset-top);
+  }
+  .hdr-actions { max-width: 38vw; }
+  .hdr-title strong { font-size: var(--t-base); }
+  #hdrTopic { display: none; }
+  .authwrap { padding: var(--s-6) var(--s-4) calc(var(--s-6) + env(safe-area-inset-bottom)); }
+  .authcard { padding: var(--s-7) var(--s-5); }
+  #voicebar { padding: var(--s-3) var(--s-4); }
+}
+
+/* Landscape phone: the sign-in button must not need a scroll to reach. */
+@media (max-height: 520px) and (max-width: 860px) {
+  .authwrap { align-items: flex-start; padding-top: var(--s-6); }
+  .authcard { gap: var(--s-4); padding: var(--s-6) var(--s-6) var(--s-7); }
+  .brand-mark { width: 38px; height: 38px; font-size: var(--t-xl); }
+  .tagline { display: none; }
+}
+
+/* ------------------------------------------------------------------ TOUCH
+   Hover does not exist, so every row has to be reachable by thumb and no
+   affordance may depend on being hovered first. */
+@media (hover: none) {
+  .chan {
+    min-height: 44px;
+    padding: var(--s-3) var(--s-4);
+  }
+  #sidebar h3 { min-height: 40px; }
+  .chan-add { font-size: var(--t-base); }
+
+  #topbar button.icon {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* No hover means no morph and no indicator stub: the open Space carries its
+     bar at rest, and every tile is already a 44px target. */
+  .sicon:hover { border-radius: var(--r-xl); }
+  .sicon:hover::before { opacity: 0; transform: translateY(-50%) scaleY(0); }
+  .sicon:hover .sdot { opacity: 1; }
+  .sicon.active:hover { border-radius: var(--r-md); }
+  .sicon.active:hover::before { opacity: 1; transform: translateY(-50%) scaleY(1); }
+  .sicon.active:hover .sdot { opacity: 0; }
+}
