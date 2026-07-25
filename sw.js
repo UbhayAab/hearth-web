@@ -7,7 +7,7 @@
 //    posts SKIP_WAITING.
 //  - The esm.sh dependencies are cached so the app opens offline instead of
 //    hanging on a module import.
-const VERSION = 'soop-v5';
+const VERSION = 'soop-v6';
 const SHELL = VERSION + '-shell';
 const VENDOR = VERSION + '-vendor';
 
@@ -57,6 +57,10 @@ const SHELL_FILES = [
 ];
 
 self.addEventListener('install', (e) => {
+  // Do not sit in "waiting" behind the previous worker. Combined with
+  // clients.claim() below, a deploy takes effect on the next load instead of the
+  // load after that.
+  self.skipWaiting();
   e.waitUntil((async () => {
     const c = await caches.open(SHELL);
     // addAll fails the whole install if any single file 404s; add individually.
@@ -116,8 +120,39 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Own assets: stale-while-revalidate.
+  // Own assets.
+  //
+  // This used to be stale-while-revalidate, which serves the CACHED copy and
+  // only refreshes it in the background. That meant every deploy took two loads
+  // to reach anyone: the first showed yesterday's code, the second showed
+  // today's. From the outside that is indistinguishable from the app being
+  // broken and then "fixed by refreshing", and it is exactly what people
+  // reported. Code and styles are small and this app is useless offline anyway,
+  // so correctness beats the few milliseconds: go to the network first and fall
+  // back to the cache only when there is no network.
   if (url.origin === self.location.origin) {
+    const isCode = /\.(js|mjs|css|webmanifest)$/i.test(url.pathname);
+
+    if (isCode) {
+      e.respondWith((async () => {
+        const cache = await caches.open(SHELL);
+        try {
+          // A short timeout keeps a dead-slow connection from hanging the app on
+          // its own cached assets; whichever answers first wins.
+          const net = await Promise.race([
+            fetch(req, { cache: 'no-cache' }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 3500)),
+          ]);
+          if (net && net.ok) { cache.put(req, net.clone()); return net; }
+          throw new Error('bad response');
+        } catch {
+          return (await cache.match(req)) || fetch(req).catch(() => Response.error());
+        }
+      })());
+      return;
+    }
+
+    // Images, fonts and icons are content-addressed enough to serve from cache.
     e.respondWith((async () => {
       const cache = await caches.open(SHELL);
       const hit = await cache.match(req);

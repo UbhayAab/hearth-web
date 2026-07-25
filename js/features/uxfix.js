@@ -1229,15 +1229,21 @@ export function register(app) {
   wireAuthEnter();
   wireBodyAdditions();
 
+  // Split in two: the observers and the bus subscriptions must be installed
+  // exactly once, or switching Space stacks a second copy of every one of them.
+  let installed = false;
   const boot = () => {
     try {
-      addSkipLink();
-      watchLoading();
+      if (!installed) {
+        installed = true;
+        addSkipLink();
+        watchLoading();
+        wireMessageList();
+        wireInlineEdit(api);
+        trackSpaceCount();
+      }
       wireChannelList();
-      wireMessageList();
-      wireInlineEdit(api);
       labelIconButtons();
-      trackSpaceCount();
       paintUnreadPill();
     } catch { /* a partial fix is better than a dead app */ }
   };
