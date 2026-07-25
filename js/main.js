@@ -40,6 +40,31 @@ async function applyRoute() {
   if (r.kind !== 'none') history.replaceState(null, '', location.pathname + location.search);
 }
 
+// Someone opening an invite link who is not signed in has to detour through
+// email. The mail app usually opens the sign-in link in a NEW tab, and
+// sessionStorage is per-tab, so the invite would be silently lost and they would
+// land in the demo Space wondering where their organisation went. localStorage
+// survives the round trip; the 30 minute TTL stops a stale token from hijacking
+// an unrelated sign-in days later.
+const INVITE_KEY = 'hearth.pendingInvite';
+const INVITE_TTL_MS = 30 * 60 * 1000;
+
+function stashPendingInvite(token) {
+  try {
+    localStorage.setItem(INVITE_KEY, JSON.stringify({ token, at: Date.now() }));
+  } catch { /* private mode: the in-URL token still works on this tab */ }
+}
+
+function takePendingInvite() {
+  try {
+    const raw = localStorage.getItem(INVITE_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(INVITE_KEY);
+    const { token, at } = JSON.parse(raw);
+    return Date.now() - at < INVITE_TTL_MS ? token : null;
+  } catch { return null; }
+}
+
 // ------------------------------------------------------------------ enter
 async function enter() {
   const s = await session();
@@ -49,8 +74,7 @@ async function enter() {
 
   // An invite in the URL is the whole multi-org story: open link, land in that Space.
   const r = route();
-  const pending = r.kind === 'join' ? r.token : sessionStorage.getItem('hearth.pendingInvite');
-  sessionStorage.removeItem('hearth.pendingInvite');
+  const pending = r.kind === 'join' ? r.token : takePendingInvite();
   let joinedId = null;
   if (pending) {
     try {
@@ -207,7 +231,7 @@ bus.on('thread:alsoSent', ({ message }) => {
 async function main() {
   // stash an invite arriving before sign-in so it survives the auth round trip
   const r = route();
-  if (r.kind === 'join') sessionStorage.setItem('hearth.pendingInvite', r.token);
+  if (r.kind === 'join') stashPendingInvite(r.token);
 
   initAuth(enter);
   initComposer();

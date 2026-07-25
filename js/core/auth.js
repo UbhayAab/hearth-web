@@ -26,7 +26,35 @@ function busy(btn, on, label) {
   btn.textContent = on ? '…' : (label || btn.dataset.label);
 }
 
+// Supabase decides between a sign-in LINK and a numeric CODE purely from the
+// email template, and template editing is locked until a custom SMTP provider is
+// configured. So on the default mailer people receive a link, not a code, and a
+// screen that only offers a code box looks broken. Support both: the link signs
+// them in on return (detectSessionInUrl), and the code box stays for when the
+// template is switched to {{ .Token }}.
+export function readAuthCallback() {
+  const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const q = new URLSearchParams(location.search || '');
+  const err = h.get('error_description') || h.get('error') || q.get('error_description');
+  const hasToken = !!(h.get('access_token') || q.get('code'));
+  if (err) {
+    // Clear it so a refresh does not resurrect a dead error.
+    history.replaceState(null, '', location.pathname + location.search);
+    return { error: decodeURIComponent(err.replace(/\+/g, ' ')) };
+  }
+  return { hasToken };
+}
+
 export function initAuth(onSignedIn) {
+  // Someone clicked an expired or already-used sign-in link. Without this they
+  // land on a blank sign-in screen with no idea why nothing happened.
+  const cb = readAuthCallback();
+  if (cb.error) {
+    authError(/expired|invalid/i.test(cb.error)
+      ? 'That sign-in link has expired or was already used. Request a new one below.'
+      : cb.error);
+  }
+
   // ---- guest ----
   $('guestBtn').onclick = async () => {
     const name = $('displayName').value.trim() || 'Guest ' + Math.floor(1000 + Math.random() * 9000);
@@ -52,7 +80,15 @@ export function initAuth(onSignedIn) {
     busy(btn, true);
     authError('');
     try {
-      const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          // The link has to come back to THIS page, including when the mail app
+          // opens it in a fresh tab.
+          emailRedirectTo: location.origin + location.pathname,
+        },
+      });
       if (error) throw error;
       $('otpTarget').textContent = email;
       show('otpStep');
