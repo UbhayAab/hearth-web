@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Notice - KDP Ads Automation</title>
+<meta name="description" content="Privacy notice for KDPbro, a private single-user application that manages its owner's own Amazon Ads campaigns through the Amazon Ads API." />
+<!-- Scoped to this application only. Not indexed, so it stays out of the way of
+     the product site hosted on this domain. -->
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#0f1115" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #14161a;
+    --muted: #5b6472;
+    --rule: #e3e7ed;
+    --accent: #1f6feb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --fg: #e6e9ef;
+      --muted: #9aa4b2;
+      --rule: #242832;
+      --accent: #6ea8ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  h2 { font-size: 1.08rem; margin: 2.4rem 0 .6rem; letter-spacing: -.01em; }
+  p, li { color: var(--fg); }
+  ul { padding-left: 1.15rem; }
+  li { margin: .35rem 0; }
+  .lede { color: var(--muted); margin: 0 0 2rem; }
+  .meta { color: var(--muted); font-size: .875rem; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0 0; }
+  a { color: var(--accent); }
+  code {
+    font: .875em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: color-mix(in srgb, var(--fg) 8%, transparent);
+    padding: .12em .38em;
+    border-radius: 4px;
+  }
+  footer { margin-top: 2rem; color: var(--muted); font-size: .875rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy Notice</h1>
+  <p class="lede">For <strong>KDPbro</strong>, a private application that manages its
+  owner's own Amazon Advertising campaigns through the Amazon Ads API.</p>
+
+  <h2>What this application is</h2>
+  <p>KDPbro is a single-user tool. It is operated by, and only by, the owner of the
+  Amazon Advertising account it connects to. It is not sold, offered, licensed, or
+  made available to anyone else, and it does not act on behalf of any third-party
+  advertiser.</p>
+
+  <h2>What it accesses</h2>
+  <p>Using the <code>advertising::campaign_management</code> scope, and only for the
+  owner's own advertising account, it reads:</p>
+  <ul>
+    <li>advertising profiles and account identifiers</li>
+    <li>campaigns, ad groups, keywords, negative keywords and product ads</li>
+    <li>performance reports: impressions, clicks, spend, orders and sales</li>
+  </ul>
+  <p>It writes only to those same campaigns: bid changes, budget changes, pausing and
+  enabling, and adding keywords or negative keywords.</p>
+
+  <h2>What it does with the data</h2>
+  <p>Performance figures are used to calculate metrics such as advertising cost of
+  sale, click-through rate and cost per click, and to apply the owner's own rules for
+  bid and keyword changes to the owner's own campaigns. Nothing else.</p>
+
+  <h2>Where the data is stored</h2>
+  <p>On the owner's personal computer. Reports and campaign snapshots are written to
+  local files. Access credentials, meaning the client identifier, client secret and
+  refresh token, are stored in a file in the owner's user profile directory. None of
+  this is uploaded to any hosted service, and none of it is committed to version
+  control.</p>
+
+  <h2>What is never done</h2>
+  <ul>
+    <li>No data is sold, rented, shared, or transferred to any third party.</li>
+    <li>No advertising data belonging to any other advertiser is requested or accessed.</li>
+    <li>No data is used to train models or build audience products.</li>
+    <li>This page sets no cookies, runs no scripts, and collects nothing from visitors.</li>
+  </ul>
+
+  <h2>Retention, revocation and deletion</h2>
+  <p>Data is kept only while it is useful for managing the campaigns, and is deleted by
+  removing the local files. Authorization can be withdrawn at any time from the Amazon
+  account that granted it, under Login with Amazon permissions at
+  <a href="https://www.amazon.com/ap/adam">amazon.com/ap/adam</a>. Revoking access
+  immediately stops the application from reading or changing anything.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this notice: <a href="mailto:kdpdiscordmidj@gmail.com">kdpdiscordmidj@gmail.com</a></p>
+
+  <hr />
+  <footer>
+    <p class="meta">Last updated 28 July 2026.</p>
+  </footer>
+</main>
+</body>
+</html>
